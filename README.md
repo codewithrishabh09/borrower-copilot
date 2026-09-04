@@ -30,36 +30,6 @@ No backend, database, or API keys are needed — the app runs entirely client-si
 
 ---
 
-## 📁 Project structure
-
-.
-├── README.md # this file
-├── RULES.md # every threshold, band, and assumption used by the engine
-├── WALKTHROUGH.md # 5-minute walkthrough — what's next, what was cut
-├── run-throughs/ # Priya, Ravi, Anita — questions asked, outputs, Negotiation Card
-│ ├── priya.md
-│ ├── ravi.md
-│ └── anita.md
-├── src/
-│ ├── components/ # UI screens (question flow, outcome cards, Negotiation Card)
-│ ├── pages/ # top-level route/screen components
-│ ├── questions/ # question set definitions, per-persona/profile branching
-│ ├── rules/ # decision logic — thresholds, bands, verdict rules
-│ ├── engine/ # orchestration: runs questions + rules → outputs
-│ ├── hooks/ # shared React hooks (form state, progress, etc.)
-│ ├── data/ # static reference data (product bands, defaults)
-│ ├── types/ # shared TypeScript types
-│ ├── App.tsx
-│ ├── main.tsx
-│ └── index.css
-├── public/
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-└── tsconfig.app.json / tsconfig.node.json
-
----
-
 ## ⚙️ How it works
 
 1. **Adaptive questions.** The app asks a short "must" set (~8–10 questions covering purpose, amount, income type, existing EMIs, expenses, age, credit score) and then branches into additional questions based on the borrower's profile (salaried vs. self-employed vs. informal). Every additional question is there because it changes an output — see `RULES.md`.
@@ -78,12 +48,6 @@ All thresholds and rules are documented — with rationale — in [`RULES.md`](.
 
 ---
 
-## 🧪 Run-throughs
-
-Full question flow, outputs, and Negotiation Card for each of the three reference personas (Priya, Ravi, Anita) are in [`run-throughs/`](./run-throughs).
-
----
-
 ## 🚫 What this is not
 
 - Not a credit score or ML model — it's a rules-based self-assessment.
@@ -94,4 +58,4 @@ Full question flow, outputs, and Negotiation Card for each of the three referenc
 
 ## ⚠️ Limitations & assumptions
 
-See the "why / source or judgement" column in `RULES.md` for every place a threshold was estimated rather than sourced from an official FOIR/RBI guideline. 
+See the "why / source or judgement" column in `RULES.md` for every place a threshold was estimated rather than sourced from an official FOIR/RBI guideline.
