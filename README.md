@@ -32,7 +32,7 @@ No backend, database, or API keys are needed — the app runs entirely client-si
 
 ## ⚙️ How it works
 
-1. **Adaptive questions.** The app asks a short "must" set (~8–10 questions covering purpose, amount, income type, existing EMIs, expenses, age, credit score) and then branches into additional questions based on the borrower's profile (salaried vs. self-employed vs. informal). Every additional question is there because it changes an output — see `RULES.md`.
+1. **Adaptive questions.** The app asks a short "must" set (~10–12 questions covering purpose, amount, income type, existing EMIs, expenses, age, credit score) and then branches into additional questions based on the borrower's profile (salaried vs. self-employed vs. informal). Every additional question is there because it changes an output — see `RULES.md`.
 
 2. **📊 Four outputs** are generated from the answers:
    - ✅ Borrow / Don't borrow / Borrow less, with a reason
