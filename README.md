@@ -49,12 +49,6 @@ All thresholds and rules are documented — with rationale — in [`RULES.md`](.
 
 ---
 
-## 🧪 Run-throughs
-
-Full question flow, outputs, and Negotiation Card for each of the three reference personas (Priya, Ravi, Anita) are in [`run-throughs/`](./run-throughs).
-
----
-
 ## 🚫 What this is not
 
 - Not a credit score or ML model — it's a rules-based self-assessment.
