@@ -16,7 +16,6 @@ import {
 import PlanComparison from "../components/PlanComparison";
 
 import AssessmentSummary from "../components/AssessmentSummary";
-
 interface ResultsProps {
   analysis: BorrowerAnalysisResult;
   onStartAgain: () => void;

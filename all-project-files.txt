@@ -1,0 +1,5765 @@
+
+==================================================
+FILE: src/hooks/useLocalStorage.ts
+==================================================
+import { useEffect, useState } from "react";
+
+export function useLocalStorage<T>(
+  key: string,
+  initialValue: T,
+) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const savedValue = window.localStorage.getItem(key);
+
+      if (savedValue !== null) {
+        return JSON.parse(savedValue) as T;
+      }
+
+      return initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify(value),
+      );
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [key, value]);
+
+  return [value, setValue] as const;
+}
+
+==================================================
+FILE: src/rules/interestRate.ts
+==================================================
+import type {
+  BorrowerProfile,
+} from "../types/borrower";
+
+import {
+  getLoanProduct,
+} from "../data/loanProducts";
+
+export interface InterestRateResult {
+  fairRateMin: number;
+
+  fairRateMax: number;
+
+  reasons: string[];
+
+  warnings: string[];
+}
+
+interface InterestRateInput {
+  profile: BorrowerProfile;
+}
+
+export function calculateInterestRate({
+  profile,
+}: InterestRateInput): InterestRateResult {
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  /*
+   * ==================================
+   * LOAN PRODUCT BASE RATE
+   * ==================================
+   */
+
+  const loanProduct = getLoanProduct(
+    profile.loanPurpose,
+  );
+
+  const baseRate =
+    loanProduct.annualInterestRate;
+
+  /*
+   * Start with a range around the
+   * loan product's configured base rate.
+   */
+  let fairRateMin =
+    baseRate - 2;
+
+  let fairRateMax =
+    baseRate + 3;
+
+  reasons.push(
+    `${loanProduct.label} borrowing is evaluated using its configured base interest rate.`,
+  );
+
+  /*
+   * ==================================
+   * CREDIT SCORE
+   * ==================================
+   */
+
+  if (
+    profile.creditScoreStatus === "unknown" ||
+    profile.creditScore === undefined
+  ) {
+    fairRateMin += 1;
+
+    fairRateMax += 2;
+
+    warnings.push(
+      "Your credit score is unknown, so the estimated rate range is wider.",
+    );
+  } else if (profile.creditScore < 550) {
+    fairRateMin += 3;
+
+    fairRateMax += 5;
+
+    warnings.push(
+      "Higher credit risk may result in more expensive borrowing.",
+    );
+  } else if (profile.creditScore < 650) {
+    fairRateMin += 2;
+
+    fairRateMax += 3;
+
+    warnings.push(
+      "Your credit profile may lead to a higher borrowing rate.",
+    );
+  } else if (profile.creditScore >= 750) {
+    fairRateMin -= 0.5;
+
+    fairRateMax -= 1;
+
+    reasons.push(
+      "A strong credit profile may help you qualify for better loan pricing.",
+    );
+  } else {
+    reasons.push(
+      "Your credit profile is within a moderate range for loan pricing.",
+    );
+  }
+
+  /*
+   * ==================================
+   * MISSED PAYMENTS
+   * ==================================
+   */
+
+  if (profile.recentMissedPayment) {
+    fairRateMin += 1;
+
+    fairRateMax += 2;
+
+    warnings.push(
+      "Recent missed payments may increase the interest rate offered.",
+    );
+  }
+
+  /*
+   * ==================================
+   * INCOME TYPE
+   * ==================================
+   */
+
+  if (profile.incomeType === "informal") {
+    fairRateMin += 1;
+
+    fairRateMax += 2;
+
+    warnings.push(
+      "Informal income may lead lenders to use more conservative pricing.",
+    );
+  }
+
+  if (
+    profile.incomeType === "self_employed" &&
+    profile.businessYears !== undefined &&
+    profile.businessYears >= 3
+  ) {
+    fairRateMin -= 0.25;
+
+    reasons.push(
+      "An established business history may support more competitive pricing.",
+    );
+  }
+
+  /*
+   * ==================================
+   * COLLATERAL
+   * ==================================
+   */
+
+  if (
+    profile.collateralValue !== undefined &&
+    profile.collateralValue > 0
+  ) {
+    fairRateMin -= 0.5;
+
+    fairRateMax -= 1;
+
+    reasons.push(
+      "Collateral may make lower-cost secured borrowing available.",
+    );
+  }
+
+  /*
+   * ==================================
+   * SAFETY BOUNDS
+   * ==================================
+   */
+
+  fairRateMin = Math.max(
+    5,
+    Number(fairRateMin.toFixed(2)),
+  );
+
+  fairRateMax = Math.max(
+    fairRateMin + 1,
+    Number(fairRateMax.toFixed(2)),
+  );
+
+  return {
+    fairRateMin,
+    fairRateMax,
+    reasons,
+    warnings,
+  };
+}
+
+==================================================
+FILE: src/rules/eligibility.ts
+==================================================
+import type {
+  BorrowerProfile,
+} from "../types/borrower";
+
+export interface EligibilityResult {
+  likelySanctionAmount: number;
+
+  eligibilityPercentage: number;
+
+  reasons: string[];
+
+  warnings: string[];
+}
+
+interface EligibilityInput {
+  profile: BorrowerProfile;
+
+  affordableLoanAmount: number;
+}
+
+/**
+ * Estimates the amount a lender may be
+ * willing to sanction.
+ *
+ * This is intentionally different from
+ * the borrower's safe affordability limit.
+ */
+export function calculateEligibility({
+  profile,
+  affordableLoanAmount,
+}: EligibilityInput): EligibilityResult {
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  let eligibilityPercentage = 100;
+
+  /*
+   * ==================================
+   * LOAN PURPOSE
+   * ==================================
+   */
+
+  switch (profile.loanPurpose) {
+    case "home":
+      reasons.push(
+        "Home borrowing may offer stronger lender comfort because the loan can be structured as secured borrowing.",
+      );
+      break;
+
+    case "vehicle":
+      reasons.push(
+        "Vehicle financing may have clearer asset-backed loan structures.",
+      );
+      break;
+
+    case "education":
+      reasons.push(
+        "Education borrowing may be evaluated using future repayment capacity and course-related factors.",
+      );
+      break;
+
+    case "business":
+      eligibilityPercentage -= 5;
+
+      warnings.push(
+        "Business borrowing may require additional income and business verification.",
+      );
+      break;
+
+    case "personal":
+      eligibilityPercentage -= 5;
+
+      warnings.push(
+        "Unsecured personal borrowing may result in more conservative lender eligibility.",
+      );
+      break;
+
+    case "other":
+    default:
+      eligibilityPercentage -= 5;
+
+      warnings.push(
+        "General-purpose borrowing is assessed using conservative eligibility assumptions.",
+      );
+      break;
+  }
+
+  /*
+   * ==================================
+   * CREDIT SCORE
+   * ==================================
+   */
+
+  if (
+    profile.creditScoreStatus === "unknown" ||
+    profile.creditScore === undefined
+  ) {
+    eligibilityPercentage -= 10;
+
+    warnings.push(
+      "Credit score is unknown, so lender eligibility is estimated more conservatively.",
+    );
+  } else if (profile.creditScore < 550) {
+    eligibilityPercentage -= 35;
+
+    warnings.push(
+      "The reported credit score may significantly reduce lender eligibility.",
+    );
+  } else if (profile.creditScore < 650) {
+    eligibilityPercentage -= 20;
+
+    warnings.push(
+      "The reported credit score may reduce the amount or terms available.",
+    );
+  } else if (profile.creditScore < 750) {
+    eligibilityPercentage -= 5;
+
+    reasons.push(
+      "The reported credit score supports moderate lender eligibility.",
+    );
+  } else {
+    reasons.push(
+      "Strong reported credit history supports lender eligibility.",
+    );
+  }
+
+  /*
+   * ==================================
+   * RECENT MISSED PAYMENT
+   * ==================================
+   */
+
+  if (profile.recentMissedPayment) {
+    eligibilityPercentage -= 20;
+
+    warnings.push(
+      "A recent missed payment may reduce the amount a lender is willing to sanction.",
+    );
+  }
+
+  /*
+   * ==================================
+   * INCOME HISTORY
+   * ==================================
+   */
+
+  if (profile.incomeType === "salaried") {
+    if (
+      profile.employmentYears !== undefined &&
+      profile.employmentYears >= 3
+    ) {
+      reasons.push(
+        "Stable employment history supports lender eligibility.",
+      );
+    } else if (
+      profile.employmentYears !== undefined &&
+      profile.employmentYears < 1
+    ) {
+      eligibilityPercentage -= 10;
+
+      warnings.push(
+        "Limited employment history may reduce lender confidence.",
+      );
+    }
+  }
+
+  if (profile.incomeType === "self_employed") {
+    if (
+      profile.businessYears !== undefined &&
+      profile.businessYears >= 3
+    ) {
+      reasons.push(
+        "Established business history supports lender eligibility.",
+      );
+    } else if (
+      profile.businessYears !== undefined &&
+      profile.businessYears < 1
+    ) {
+      eligibilityPercentage -= 15;
+
+      warnings.push(
+        "Limited business operating history may reduce lender eligibility.",
+      );
+    }
+  }
+
+  /*
+   * ==================================
+   * INCOME TYPE
+   * ==================================
+   */
+
+  if (profile.incomeType === "informal") {
+    eligibilityPercentage -= 15;
+
+    warnings.push(
+      "Informal income can make lender verification more difficult.",
+    );
+  }
+
+  /*
+   * ==================================
+   * COLLATERAL
+   * ==================================
+   */
+
+  if (
+    profile.collateralValue !== undefined &&
+    profile.collateralValue > 0
+  ) {
+    reasons.push(
+      "Available collateral may support eligibility for secured borrowing.",
+    );
+
+    if (
+      profile.collateralValue >=
+      affordableLoanAmount * 0.5
+    ) {
+      eligibilityPercentage += 10;
+    }
+  }
+
+  /*
+   * ==================================
+   * CO-APPLICANT
+   * ==================================
+   */
+
+  if (profile.hasCoApplicant) {
+    eligibilityPercentage += 5;
+
+    reasons.push(
+      "A co-applicant may strengthen lender eligibility.",
+    );
+  }
+
+  /*
+   * ==================================
+   * SAFETY BOUNDS
+   * ==================================
+   */
+
+  eligibilityPercentage = Math.max(
+    20,
+    Math.min(eligibilityPercentage, 110),
+  );
+
+  const likelySanctionAmount =
+    affordableLoanAmount *
+    (eligibilityPercentage / 100);
+
+  return {
+    likelySanctionAmount: Math.round(
+      likelySanctionAmount,
+    ),
+
+    eligibilityPercentage,
+
+    reasons,
+
+    warnings,
+  };
+}
+
+==================================================
+FILE: src/rules/borrowingDecision.ts
+==================================================
+export type BorrowingRecommendation =
+  | "BORROW"
+  | "BORROW_LESS"
+  | "DO_NOT_BORROW";
+
+export type RiskLevel =
+  | "LOW"
+  | "MEDIUM"
+  | "HIGH";
+
+export interface BorrowingDecisionInput {
+  requestedLoanAmount: number;
+  affordableLoanAmount: number;
+
+  safeMonthlyEmi: number;
+  requestedMonthlyEmi: number;
+
+  creditScore?: number;
+
+  hasRecentMissedPayment?: boolean;
+
+  incomeReliability:
+    | "high"
+    | "medium"
+    | "low";
+
+  stressTestPassed: boolean;
+}
+
+export interface BorrowingDecisionResult {
+  recommendation: BorrowingRecommendation;
+
+  riskLevel: RiskLevel;
+
+  confidenceScore: number;
+
+  recommendedLoanAmount: number;
+
+  loanDifference: number;
+
+  reasons: string[];
+
+  warnings: string[];
+}
+
+/**
+ * Generates a borrowing recommendation using:
+ *
+ * - Loan affordability
+ * - EMI affordability
+ * - Credit risk
+ * - Payment history
+ * - Income reliability
+ * - Income stress testing
+ */
+export function calculateBorrowingDecision({
+  requestedLoanAmount,
+  affordableLoanAmount,
+  safeMonthlyEmi,
+  requestedMonthlyEmi,
+  creditScore,
+  hasRecentMissedPayment = false,
+  incomeReliability,
+  stressTestPassed,
+}: BorrowingDecisionInput): BorrowingDecisionResult {
+  if (requestedLoanAmount <= 0) {
+    throw new Error(
+      "Requested loan amount must be greater than zero.",
+    );
+  }
+
+  if (affordableLoanAmount < 0) {
+    throw new Error(
+      "Affordable loan amount cannot be negative.",
+    );
+  }
+
+  if (safeMonthlyEmi < 0) {
+    throw new Error(
+      "Safe monthly EMI cannot be negative.",
+    );
+  }
+
+  if (requestedMonthlyEmi < 0) {
+    throw new Error(
+      "Requested monthly EMI cannot be negative.",
+    );
+  }
+
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  let riskScore = 0;
+
+  /*
+   * ==========================
+   * LOAN AFFORDABILITY
+   * ==========================
+   */
+
+  const loanAmountAffordable =
+    requestedLoanAmount <= affordableLoanAmount;
+
+  const emiAffordable =
+    requestedMonthlyEmi <= safeMonthlyEmi;
+
+  if (loanAmountAffordable && emiAffordable) {
+    reasons.push(
+      "The requested loan amount and EMI are within the calculated affordability limits.",
+    );
+  } else {
+    riskScore += 3;
+
+    warnings.push(
+      "The requested borrowing amount or monthly EMI exceeds your calculated safe limit.",
+    );
+  }
+
+  /*
+   * ==========================
+   * CREDIT RISK
+   * ==========================
+   */
+
+  if (creditScore !== undefined) {
+    if (creditScore < 550) {
+      riskScore += 3;
+
+      warnings.push(
+        "Your reported credit score indicates elevated credit risk.",
+      );
+    } else if (creditScore < 650) {
+      riskScore += 2;
+
+      warnings.push(
+        "Your credit score may limit the interest rates or loan terms available to you.",
+      );
+    } else if (creditScore < 750) {
+      riskScore += 1;
+
+      reasons.push(
+        "Your credit score appears to be within a moderate range.",
+      );
+    } else {
+      reasons.push(
+        "Your credit score indicates relatively strong repayment history.",
+      );
+    }
+  } else {
+    riskScore += 1;
+
+    warnings.push(
+      "Credit score information was unavailable, so the recommendation has lower confidence.",
+    );
+  }
+
+  /*
+   * ==========================
+   * MISSED PAYMENTS
+   * ==========================
+   */
+
+  if (hasRecentMissedPayment) {
+    riskScore += 3;
+
+    warnings.push(
+      "A recent missed payment can increase repayment risk and affect loan pricing.",
+    );
+  }
+
+  /*
+   * ==========================
+   * INCOME RELIABILITY
+   * ==========================
+   */
+
+  if (incomeReliability === "low") {
+    riskScore += 2;
+
+    warnings.push(
+      "Your income appears variable, so the recommendation uses a more conservative risk approach.",
+    );
+  } else if (incomeReliability === "medium") {
+    riskScore += 1;
+
+    warnings.push(
+      "Your income estimate has moderate reliability.",
+    );
+  } else {
+    reasons.push(
+      "Your income appears relatively stable based on the information provided.",
+    );
+  }
+
+  /*
+   * ==========================
+   * STRESS TEST
+   * ==========================
+   */
+
+  if (!stressTestPassed) {
+    riskScore += 2;
+
+    warnings.push(
+      "The proposed EMI did not remain affordable in one or more income stress scenarios.",
+    );
+  } else {
+    reasons.push(
+      "The proposed EMI remained within the affordability threshold during the tested income stress scenarios.",
+    );
+  }
+
+  /*
+   * ==========================
+   * FINAL RECOMMENDATION
+   * ==========================
+   *
+   * Important rule:
+   *
+   * A borrower should NOT receive a direct BORROW
+   * recommendation if the stress test fails.
+   */
+
+  let recommendation: BorrowingRecommendation;
+
+  /*
+   * Very high risk or no affordability.
+   */
+  if (
+    affordableLoanAmount <= 0 ||
+    safeMonthlyEmi <= 0 ||
+    riskScore >= 7
+  ) {
+    recommendation = "DO_NOT_BORROW";
+  }
+
+  /*
+   * Requested loan exceeds affordability.
+   */
+  else if (
+    !loanAmountAffordable ||
+    !emiAffordable
+  ) {
+    recommendation = "BORROW_LESS";
+  }
+
+  /*
+   * Even when the requested loan is affordable,
+   * failing the stress test prevents a direct
+   * BORROW recommendation.
+   */
+  else if (!stressTestPassed) {
+    recommendation = "BORROW_LESS";
+  }
+
+  /*
+   * Medium risk.
+   */
+  else if (riskScore >= 4) {
+    recommendation = "BORROW_LESS";
+  }
+
+  /*
+   * Low risk + affordable + stress test passed.
+   */
+  else {
+    recommendation = "BORROW";
+  }
+
+  /*
+   * ==========================
+   * RECOMMENDED LOAN AMOUNT
+   * ==========================
+   */
+
+  let recommendedLoanAmount =
+    Math.max(
+      Math.min(
+        requestedLoanAmount,
+        affordableLoanAmount,
+      ),
+      0,
+    );
+
+  /*
+   * If the stress test fails, recommend
+   * a more conservative borrowing amount.
+   */
+  if (!stressTestPassed) {
+    recommendedLoanAmount =
+      Math.min(
+        recommendedLoanAmount,
+        requestedLoanAmount * 0.8,
+      );
+  }
+
+  /*
+   * If the recommendation is DO_NOT_BORROW,
+   * no additional borrowing is recommended.
+   */
+  if (recommendation === "DO_NOT_BORROW") {
+    recommendedLoanAmount = 0;
+  }
+
+  const loanDifference =
+    Math.max(
+      requestedLoanAmount -
+        recommendedLoanAmount,
+      0,
+    );
+
+  /*
+   * ==========================
+   * CONFIDENCE SCORE
+   * ==========================
+   */
+
+  const confidenceScore =
+    Math.max(
+      100 - riskScore * 12,
+      20,
+    );
+
+  /*
+   * ==========================
+   * RISK LEVEL
+   * ==========================
+   */
+
+  let riskLevel: RiskLevel;
+
+  if (riskScore >= 7) {
+    riskLevel = "HIGH";
+  } else if (riskScore >= 4) {
+    riskLevel = "MEDIUM";
+  } else {
+    riskLevel = "LOW";
+  }
+
+  return {
+    recommendation,
+
+    riskLevel,
+
+    confidenceScore,
+
+    recommendedLoanAmount:
+      Math.round(recommendedLoanAmount),
+
+    loanDifference:
+      Math.round(loanDifference),
+
+    reasons,
+
+    warnings,
+  };
+}
+
+==================================================
+FILE: src/rules/affordability.ts
+==================================================
+
+
+==================================================
+FILE: src/rules/negotiation.ts
+==================================================
+import type { BorrowerProfile } from "../types/borrower";
+
+import type {
+  BorrowingDecisionResult,
+} from "./borrowingDecision";
+
+export interface NegotiationSuggestion {
+  title: string;
+
+  description: string;
+
+  priority: "HIGH" | "MEDIUM" | "LOW";
+}
+
+export interface NegotiationResult {
+  headline: string;
+
+  summary: string;
+
+  suggestions: NegotiationSuggestion[];
+}
+
+interface NegotiationInput {
+  profile: BorrowerProfile;
+
+  decision: BorrowingDecisionResult;
+
+  affordableLoanAmount: number;
+
+  likelySanctionAmount: number;
+
+  fairRateMin: number;
+
+  fairRateMax: number;
+
+  safeMonthlyEmi: number;
+
+  requestedMonthlyEmi: number;
+}
+
+/**
+ * Generates actionable suggestions for the borrower.
+ *
+ * This does not decide whether the borrower should
+ * borrow. It explains what actions may improve the
+ * borrowing situation or loan terms.
+ */
+export function generateNegotiationStrategy({
+  profile,
+  decision,
+  affordableLoanAmount,
+  likelySanctionAmount,
+  fairRateMin,
+  fairRateMax,
+  safeMonthlyEmi,
+  requestedMonthlyEmi,
+}: NegotiationInput): NegotiationResult {
+  const suggestions: NegotiationSuggestion[] = [];
+
+  /*
+   * ==================================
+   * BORROW LESS
+   * ==================================
+   */
+
+  if (
+    decision.recommendation === "BORROW_LESS" &&
+    affordableLoanAmount > 0
+  ) {
+    suggestions.push({
+      title: "Reduce the requested amount",
+      description:
+        `Consider reducing your borrowing closer to ₹${Math.round(
+          affordableLoanAmount,
+        ).toLocaleString("en-IN")}. This is closer to your calculated affordability limit.`,
+      priority: "HIGH",
+    });
+  }
+
+  /*
+   * ==================================
+   * DO NOT BORROW
+   * ==================================
+   */
+
+  if (decision.recommendation === "DO_NOT_BORROW") {
+    suggestions.push({
+      title: "Avoid taking additional debt right now",
+      description:
+        "The current assessment indicates significant affordability or repayment risk. Consider improving income stability, reducing existing obligations, or building savings before borrowing.",
+      priority: "HIGH",
+    });
+  }
+
+  /*
+   * ==================================
+   * EMI PRESSURE
+   * ==================================
+   */
+
+  if (
+    requestedMonthlyEmi > safeMonthlyEmi &&
+    safeMonthlyEmi > 0
+  ) {
+    suggestions.push({
+      title: "Lower your monthly EMI pressure",
+      description:
+        "A lower loan amount or a carefully chosen longer repayment period may reduce monthly repayment pressure.",
+      priority: "HIGH",
+    });
+  }
+
+  /*
+   * ==================================
+   * INTEREST RATE
+   * ==================================
+   */
+
+  const rateRange =
+    fairRateMax - fairRateMin;
+
+  if (rateRange >= 2) {
+    suggestions.push({
+      title: "Compare loan offers",
+      description:
+        `Your estimated fair rate range is ${fairRateMin}% to ${fairRateMax}%. Comparing multiple lenders may help you negotiate better pricing.`,
+      priority: "MEDIUM",
+    });
+  }
+
+  /*
+   * ==================================
+   * LOAN PURPOSE STRATEGY
+   * ==================================
+   */
+
+  switch (profile.loanPurpose) {
+    case "home":
+      suggestions.push({
+        title: "Evaluate the long-term borrowing cost",
+        description:
+          "Home loans usually involve long repayment periods, so compare the total interest paid over the full tenure instead of focusing only on the monthly EMI.",
+        priority: "MEDIUM",
+      });
+      break;
+
+    case "vehicle":
+      suggestions.push({
+        title: "Review the total vehicle financing cost",
+        description:
+          "Compare the down payment, loan cost, insurance, maintenance, and monthly EMI before choosing a financing option.",
+        priority: "MEDIUM",
+      });
+      break;
+
+    case "business":
+      suggestions.push({
+        title: "Protect business cash flow",
+        description:
+          "Ensure the proposed EMI remains manageable even during slower business months and does not create excessive working-capital pressure.",
+        priority: "HIGH",
+      });
+      break;
+
+    case "education":
+      suggestions.push({
+        title: "Plan repayment around future income",
+        description:
+          "Consider how repayment will begin and whether expected future income can support the EMI after completing the education or training.",
+        priority: "HIGH",
+      });
+      break;
+
+    case "personal":
+      suggestions.push({
+        title: "Review whether the expense can be reduced",
+        description:
+          "For unsecured personal borrowing, reducing the required amount may lower both the monthly EMI and the total borrowing cost.",
+        priority: "MEDIUM",
+      });
+      break;
+
+    case "other":
+    default:
+      suggestions.push({
+        title: "Use conservative borrowing assumptions",
+        description:
+          "For general-purpose borrowing, focus on affordability and total repayment cost before accepting additional debt.",
+        priority: "MEDIUM",
+      });
+      break;
+  }
+
+  /*
+   * ==================================
+   * COLLATERAL
+   * ==================================
+   */
+
+  if (
+    profile.collateralValue !== undefined &&
+    profile.collateralValue > 0
+  ) {
+    suggestions.push({
+      title: "Consider secured borrowing",
+      description:
+        "Available collateral may help improve lender eligibility or reduce borrowing costs compared with unsecured options.",
+      priority: "MEDIUM",
+    });
+  }
+
+  /*
+   * ==================================
+   * CO-APPLICANT
+   * ==================================
+   */
+
+  if (!profile.hasCoApplicant) {
+    suggestions.push({
+      title: "Evaluate a co-applicant carefully",
+      description:
+        "A financially strong co-applicant may improve eligibility in some lending situations, depending on lender policies.",
+      priority: "LOW",
+    });
+  }
+
+  /*
+   * ==================================
+   * CREDIT IMPROVEMENT
+   * ==================================
+   */
+
+  if (
+    profile.creditScoreStatus === "unknown" ||
+    profile.creditScore === undefined
+  ) {
+    suggestions.push({
+      title: "Check your credit profile",
+      description:
+        "Knowing your credit profile can help you better understand likely loan pricing and eligibility.",
+      priority: "MEDIUM",
+    });
+  } else if (profile.creditScore < 650) {
+    suggestions.push({
+      title: "Improve your credit profile before borrowing",
+      description:
+        "Improving repayment history and reducing outstanding obligations may help you access better loan terms.",
+      priority: "HIGH",
+    });
+  }
+
+  /*
+   * ==================================
+   * MISSED PAYMENT
+   * ==================================
+   */
+
+  if (profile.recentMissedPayment) {
+    suggestions.push({
+      title: "Stabilize repayment history",
+      description:
+        "Recent missed payments may affect eligibility and pricing. Maintaining consistent repayments can strengthen your future borrowing profile.",
+      priority: "HIGH",
+    });
+  }
+
+  /*
+   * ==================================
+   * LENDER VS SAFE AMOUNT
+   * ==================================
+   */
+
+  if (
+    likelySanctionAmount >
+    affordableLoanAmount * 1.1
+  ) {
+    suggestions.push({
+      title: "Do not borrow only because you are eligible",
+      description:
+        "A lender may be willing to sanction more than your calculated safe borrowing amount. Affordability should remain your primary limit.",
+      priority: "HIGH",
+    });
+  }
+
+  /*
+   * ==================================
+   * FALLBACK
+   * ==================================
+   */
+
+  if (suggestions.length === 0) {
+    suggestions.push({
+      title: "Review the complete loan offer",
+      description:
+        "Before accepting a loan, review the interest rate, processing charges, repayment schedule, and total borrowing cost.",
+      priority: "LOW",
+    });
+  }
+
+  /*
+   * ==================================
+   * FINAL HEADLINE
+   * ==================================
+   */
+
+  if (
+    decision.recommendation === "DO_NOT_BORROW"
+  ) {
+    return {
+      headline:
+        "Focus on improving affordability first",
+      summary:
+        "Your current borrowing request may place significant pressure on your finances. Improving your financial position before taking additional debt may be safer.",
+      suggestions,
+    };
+  }
+
+  if (
+    decision.recommendation === "BORROW_LESS"
+  ) {
+    return {
+      headline:
+        "A smaller loan may be more manageable",
+      summary:
+        "Your current request appears to be above a comfortable affordability level. Reducing the borrowing amount may improve your financial safety.",
+      suggestions,
+    };
+  }
+
+  return {
+    headline:
+      "Compare offers before accepting a loan",
+    summary:
+      "Your borrowing request appears manageable based on the provided information, but you should still compare pricing and total borrowing costs.",
+    suggestions,
+  };
+}
+
+==================================================
+FILE: src/rules/confidence.ts
+==================================================
+export interface ConfidenceInput {
+  riskScore: number;
+
+  hasCreditScore: boolean;
+
+  incomeReliability:
+    | "high"
+    | "medium"
+    | "low";
+
+  hasRecentMissedPayment: boolean;
+
+  stressTestPassed: boolean;
+}
+
+export interface ConfidenceResult {
+  confidenceScore: number;
+
+  factors: string[];
+}
+
+/**
+ * Calculates how confident the system is
+ * in the borrowing recommendation.
+ *
+ * Confidence represents how complete and
+ * consistent the borrower information is.
+ */
+export function calculateConfidence({
+  riskScore,
+  hasCreditScore,
+  incomeReliability,
+  hasRecentMissedPayment,
+  stressTestPassed,
+}: ConfidenceInput): ConfidenceResult {
+  let confidenceScore = 100;
+
+  const factors: string[] = [];
+
+  /*
+   * ==========================
+   * RISK SCORE
+   * ==========================
+   */
+
+  confidenceScore -= riskScore * 8;
+
+  /*
+   * ==========================
+   * CREDIT INFORMATION
+   * ==========================
+   */
+
+  if (!hasCreditScore) {
+    confidenceScore -= 10;
+
+    factors.push(
+      "Credit score information is unavailable.",
+    );
+  }
+
+  /*
+   * ==========================
+   * INCOME RELIABILITY
+   * ==========================
+   */
+
+  if (incomeReliability === "medium") {
+    confidenceScore -= 5;
+
+    factors.push(
+      "Income reliability is moderate.",
+    );
+  }
+
+  if (incomeReliability === "low") {
+    confidenceScore -= 12;
+
+    factors.push(
+      "Income reliability is low or variable.",
+    );
+  }
+
+  /*
+   * ==========================
+   * REPAYMENT HISTORY
+   * ==========================
+   */
+
+  if (hasRecentMissedPayment) {
+    confidenceScore -= 8;
+
+    factors.push(
+      "Recent missed payments increase uncertainty.",
+    );
+  }
+
+  /*
+   * ==========================
+   * STRESS TEST
+   * ==========================
+   */
+
+  if (!stressTestPassed) {
+    confidenceScore -= 10;
+
+    factors.push(
+      "The requested EMI did not pass all stress scenarios.",
+    );
+  }
+
+  /*
+   * ==========================
+   * FINAL BOUNDS
+   * ==========================
+   */
+
+  confidenceScore = Math.max(
+    20,
+    Math.min(
+      Math.round(confidenceScore),
+      100,
+    ),
+  );
+
+  return {
+    confidenceScore,
+    factors,
+  };
+}
+
+==================================================
+FILE: src/types/borrower.ts
+==================================================
+export type IncomeType =
+  | "salaried"
+  | "self_employed"
+  | "informal";
+
+export type LoanPurpose =
+  | "personal"
+  | "business"
+  | "vehicle"
+  | "home"
+  | "education"
+  | "other";
+
+export type CreditScoreStatus =
+  | "known"
+  | "unknown";
+
+export type RiskLevel =
+  | "low"
+  | "medium"
+  | "high";
+
+export type ConfidenceLevel =
+  | "low"
+  | "medium"
+  | "high";
+
+export type BorrowDecision =
+  | "borrow"
+  | "borrow_less"
+  | "dont_borrow";
+
+export interface BorrowerProfile {
+  loanPurpose?: LoanPurpose;
+
+  requestedAmount?: number;
+
+  incomeType?: IncomeType;
+
+  monthlyIncome?: number;
+
+  minimumMonthlyIncome?: number;
+
+  maximumMonthlyIncome?: number;
+
+  existingEmi?: number;
+
+  monthlyExpenses?: number;
+
+  age?: number;
+
+  creditScoreStatus?: CreditScoreStatus;
+
+  creditScore?: number;
+
+  recentMissedPayment?: boolean;
+
+  emergencySavingsMonths?: number;
+
+  employmentYears?: number;
+
+  businessYears?: number;
+
+  annualItrIncome?: number;
+
+  collateralValue?: number;
+
+  hasCoApplicant?: boolean;
+
+  upcomingLargeExpense?: boolean;
+}
+
+export interface BorrowerAnswer {
+  questionId: string;
+
+  value: string | number | boolean | undefined;
+}
+
+export interface BorrowerResult {
+  decision: BorrowDecision;
+
+  safeMonthlyEmi: number;
+
+  safeLoanAmount: number;
+
+  likelySanctionAmount: number;
+
+  fairRateMin: number;
+
+  fairRateMax: number;
+
+  estimatedApr: number;
+
+  riskLevel: RiskLevel;
+
+  confidence: ConfidenceLevel;
+
+  explanation: string;
+}
+
+==================================================
+FILE: src/engine/affordabilityCalculator.ts
+==================================================
+import type { BorrowerProfile } from "../types/borrower";
+
+export interface AffordabilityInput {
+  usableMonthlyIncome: number;
+  monthlyExpenses: number;
+  existingEmi: number;
+  emergencySavingsMonths?: number;
+  upcomingLargeExpense?: boolean;
+}
+
+export interface AffordabilityResult {
+  usableMonthlyIncome: number;
+
+  monthlyExpenses: number;
+
+  existingEmi: number;
+
+  disposableIncome: number;
+
+  maxEmiByIncomeRatio: number;
+
+  maxEmiByDisposableIncome: number;
+
+  safeMonthlyEmi: number;
+
+  safetyAdjustmentPercentage: number;
+
+  explanation: string;
+}
+
+/**
+ * Calculates the maximum safe EMI a borrower
+ * can take after considering:
+ *
+ * - Income
+ * - Household expenses
+ * - Existing EMI
+ * - Emergency savings
+ * - Upcoming major expenses
+ */
+export function calculateSafeMonthlyEmi({
+  usableMonthlyIncome,
+  monthlyExpenses,
+  existingEmi,
+  emergencySavingsMonths = 0,
+  upcomingLargeExpense = false,
+}: AffordabilityInput): AffordabilityResult {
+  if (usableMonthlyIncome <= 0) {
+    throw new Error(
+      "Usable monthly income must be greater than zero.",
+    );
+  }
+
+  if (monthlyExpenses < 0) {
+    throw new Error(
+      "Monthly expenses cannot be negative.",
+    );
+  }
+
+  if (existingEmi < 0) {
+    throw new Error(
+      "Existing EMI cannot be negative.",
+    );
+  }
+
+  /*
+   * Remaining income after necessary expenses
+   * and current loan obligations.
+   */
+  const disposableIncome =
+    usableMonthlyIncome -
+    monthlyExpenses -
+    existingEmi;
+
+  /*
+   * Base EMI ratio.
+   *
+   * We start with 40% of usable income as an
+   * upper affordability boundary.
+   *
+   * This includes the borrower's existing EMI.
+   */
+  let safeEmiPercentage = 40;
+
+  /*
+   * Lower savings means higher financial risk.
+   */
+  if (emergencySavingsMonths < 3) {
+    safeEmiPercentage -= 10;
+  } else if (emergencySavingsMonths < 6) {
+    safeEmiPercentage -= 5;
+  }
+
+  /*
+   * Reduce affordability if a major known
+   * expense is expected soon.
+   */
+  if (upcomingLargeExpense) {
+    safeEmiPercentage -= 5;
+  }
+
+  /*
+   * Prevent the ratio from becoming too aggressive
+   * or unrealistically low.
+   */
+  safeEmiPercentage = Math.max(
+    safeEmiPercentage,
+    20,
+  );
+
+  /*
+   * Maximum TOTAL EMI capacity.
+   */
+  const totalEmiCapacity =
+    usableMonthlyIncome *
+    (safeEmiPercentage / 100);
+
+  /*
+   * Existing EMIs consume part of the capacity.
+   */
+  const maxEmiByIncomeRatio =
+    Math.max(
+      totalEmiCapacity - existingEmi,
+      0,
+    );
+
+  /*
+   * Never allocate all disposable income
+   * to the new EMI.
+   *
+   * We allow only 60% of disposable income.
+   */
+  const maxEmiByDisposableIncome =
+    Math.max(
+      disposableIncome * 0.6,
+      0,
+    );
+
+  /*
+   * The conservative safe EMI ceiling
+   * is the lower of both limits.
+   */
+  const safeMonthlyEmi = Math.max(
+    Math.min(
+      maxEmiByIncomeRatio,
+      maxEmiByDisposableIncome,
+    ),
+    0,
+  );
+
+  return {
+    usableMonthlyIncome:
+      Math.round(usableMonthlyIncome),
+
+    monthlyExpenses:
+      Math.round(monthlyExpenses),
+
+    existingEmi:
+      Math.round(existingEmi),
+
+    disposableIncome:
+      Math.round(disposableIncome),
+
+    maxEmiByIncomeRatio:
+      Math.round(maxEmiByIncomeRatio),
+
+    maxEmiByDisposableIncome:
+      Math.round(maxEmiByDisposableIncome),
+
+    safeMonthlyEmi:
+      Math.round(safeMonthlyEmi),
+
+    safetyAdjustmentPercentage:
+      safeEmiPercentage,
+
+    explanation:
+      safeMonthlyEmi > 0
+        ? "The safe EMI ceiling is based on both income capacity and remaining disposable income, using the more conservative limit."
+        : "Your current expenses and existing EMI obligations leave no safe capacity for an additional EMI.",
+  };
+}
+
+/**
+ * Convenience function for calculating affordability
+ * directly from a borrower profile.
+ */
+export function calculateProfileAffordability(
+  profile: BorrowerProfile,
+  usableMonthlyIncome: number,
+): AffordabilityResult {
+  return calculateSafeMonthlyEmi({
+    usableMonthlyIncome,
+
+    monthlyExpenses:
+      profile.monthlyExpenses ?? 0,
+
+    existingEmi:
+      profile.existingEmi ?? 0,
+
+    emergencySavingsMonths:
+      profile.emergencySavingsMonths ?? 0,
+
+    upcomingLargeExpense:
+      profile.upcomingLargeExpense ?? false,
+  });
+}
+
+==================================================
+FILE: src/engine/emiCalculator.ts
+==================================================
+export interface EmiCalculationInput {
+  principal: number;
+  annualInterestRate: number;
+  tenureMonths: number;
+}
+
+export interface EmiCalculationResult {
+  monthlyEmi: number;
+  totalPayment: number;
+  totalInterest: number;
+}
+
+/**
+ * Calculates EMI using the standard reducing-balance formula.
+ *
+ * EMI = P × r × (1 + r)^n / ((1 + r)^n - 1)
+ *
+ * P = Principal
+ * r = Monthly interest rate
+ * n = Total number of monthly payments
+ */
+export function calculateEmi({
+  principal,
+  annualInterestRate,
+  tenureMonths,
+}: EmiCalculationInput): EmiCalculationResult {
+  if (principal <= 0) {
+    throw new Error("Principal must be greater than zero.");
+  }
+
+  if (annualInterestRate < 0) {
+    throw new Error(
+      "Interest rate cannot be negative.",
+    );
+  }
+
+  if (tenureMonths <= 0) {
+    throw new Error(
+      "Tenure must be greater than zero.",
+    );
+  }
+
+  const monthlyRate =
+    annualInterestRate / 12 / 100;
+
+  /**
+   * Zero-interest loan.
+   */
+  if (monthlyRate === 0) {
+    const monthlyEmi =
+      principal / tenureMonths;
+
+    return {
+      monthlyEmi: Math.round(monthlyEmi),
+      totalPayment: Math.round(principal),
+      totalInterest: 0,
+    };
+  }
+
+  const compoundFactor =
+    Math.pow(
+      1 + monthlyRate,
+      tenureMonths,
+    );
+
+  const monthlyEmi =
+    (principal *
+      monthlyRate *
+      compoundFactor) /
+    (compoundFactor - 1);
+
+  const totalPayment =
+    monthlyEmi * tenureMonths;
+
+  const totalInterest =
+    totalPayment - principal;
+
+  return {
+    monthlyEmi: Math.round(monthlyEmi),
+    totalPayment: Math.round(totalPayment),
+    totalInterest: Math.round(totalInterest),
+  };
+}
+
+/**
+ * Calculates the maximum principal
+ * that can be supported by a given EMI.
+ *
+ * This is the inverse EMI formula.
+ */
+export function calculateAffordableLoanAmount(
+  safeMonthlyEmi: number,
+  annualInterestRate: number,
+  tenureMonths: number,
+): number {
+  if (safeMonthlyEmi <= 0) {
+    return 0;
+  }
+
+  if (annualInterestRate < 0) {
+    throw new Error(
+      "Interest rate cannot be negative.",
+    );
+  }
+
+  if (tenureMonths <= 0) {
+    throw new Error(
+      "Tenure must be greater than zero.",
+    );
+  }
+
+  const monthlyRate =
+    annualInterestRate / 12 / 100;
+
+  /**
+   * Zero-interest case.
+   */
+  if (monthlyRate === 0) {
+    return Math.round(
+      safeMonthlyEmi * tenureMonths,
+    );
+  }
+
+  const compoundFactor =
+    Math.pow(
+      1 + monthlyRate,
+      tenureMonths,
+    );
+
+  const principal =
+    (safeMonthlyEmi *
+      (compoundFactor - 1)) /
+    (monthlyRate * compoundFactor);
+
+  return Math.round(principal);
+}
+
+/**
+ * Calculates what percentage of income
+ * is consumed by EMI.
+ */
+export function calculateEmiToIncomeRatio(
+  monthlyEmi: number,
+  monthlyIncome: number,
+): number {
+  if (monthlyIncome <= 0) {
+    return 0;
+  }
+
+  return Number(
+    (
+      (monthlyEmi / monthlyIncome) *
+      100
+    ).toFixed(2),
+  );
+}
+
+==================================================
+FILE: src/engine/aprCalculator.ts
+==================================================
+export interface AprCalculationInput {
+  principal: number;
+  annualInterestRate: number;
+  tenureMonths: number;
+  processingFeePercentage: number;
+}
+
+export interface AprCalculationResult {
+  processingFee: number;
+  netDisbursedAmount: number;
+  monthlyEmi: number;
+  totalPayment: number;
+  totalInterest: number;
+  estimatedApr: number;
+}
+
+/**
+ * Calculates the monthly EMI using the
+ * standard reducing-balance loan formula.
+ */
+function calculateMonthlyEmi(
+  principal: number,
+  annualInterestRate: number,
+  tenureMonths: number,
+): number {
+  const monthlyRate =
+    annualInterestRate / 12 / 100;
+
+  if (monthlyRate === 0) {
+    return principal / tenureMonths;
+  }
+
+  const compoundFactor = Math.pow(
+    1 + monthlyRate,
+    tenureMonths,
+  );
+
+  return (
+    (principal *
+      monthlyRate *
+      compoundFactor) /
+    (compoundFactor - 1)
+  );
+}
+
+/**
+ * Calculates the present value of all future
+ * EMI payments at a given monthly rate.
+ */
+function calculatePresentValue(
+  monthlyEmi: number,
+  monthlyRate: number,
+  tenureMonths: number,
+): number {
+  if (monthlyRate === 0) {
+    return monthlyEmi * tenureMonths;
+  }
+
+  const discountFactor =
+    1 -
+    Math.pow(
+      1 + monthlyRate,
+      -tenureMonths,
+    );
+
+  return (
+    monthlyEmi *
+    (discountFactor / monthlyRate)
+  );
+}
+
+/**
+ * Estimates the effective APR using binary search.
+ *
+ * We solve for the interest rate where:
+ *
+ * Present Value of future EMI payments
+ * =
+ * Actual amount received by borrower
+ *
+ * This accounts for upfront processing fees.
+ */
+function estimateApr(
+  netDisbursedAmount: number,
+  monthlyEmi: number,
+  tenureMonths: number,
+): number {
+  if (
+    netDisbursedAmount <= 0 ||
+    monthlyEmi <= 0 ||
+    tenureMonths <= 0
+  ) {
+    return 0;
+  }
+
+  let low = 0;
+  let high = 1;
+
+  for (let iteration = 0; iteration < 100; iteration++) {
+    const mid = (low + high) / 2;
+
+    const presentValue =
+      calculatePresentValue(
+        monthlyEmi,
+        mid,
+        tenureMonths,
+      );
+
+    if (presentValue > netDisbursedAmount) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  const monthlyRate =
+    (low + high) / 2;
+
+  const annualApr =
+    monthlyRate * 12 * 100;
+
+  return Number(annualApr.toFixed(2));
+}
+
+/**
+ * Calculates effective borrowing cost.
+ *
+ * Includes:
+ * - Interest cost
+ * - Processing fee
+ * - Net amount actually received
+ * - Estimated effective APR
+ */
+export function calculateEffectiveApr({
+  principal,
+  annualInterestRate,
+  tenureMonths,
+  processingFeePercentage,
+}: AprCalculationInput): AprCalculationResult {
+  if (principal <= 0) {
+    throw new Error(
+      "Principal must be greater than zero.",
+    );
+  }
+
+  if (annualInterestRate < 0) {
+    throw new Error(
+      "Interest rate cannot be negative.",
+    );
+  }
+
+  if (tenureMonths <= 0) {
+    throw new Error(
+      "Tenure must be greater than zero.",
+    );
+  }
+
+  if (processingFeePercentage < 0) {
+    throw new Error(
+      "Processing fee cannot be negative.",
+    );
+  }
+
+  const processingFee =
+    principal *
+    (processingFeePercentage / 100);
+
+  const netDisbursedAmount =
+    principal - processingFee;
+
+  const monthlyEmi =
+    calculateMonthlyEmi(
+      principal,
+      annualInterestRate,
+      tenureMonths,
+    );
+
+  const totalPayment =
+    monthlyEmi * tenureMonths;
+
+  const totalInterest =
+    totalPayment - principal;
+
+  const estimatedApr =
+    estimateApr(
+      netDisbursedAmount,
+      monthlyEmi,
+      tenureMonths,
+    );
+
+  return {
+    processingFee: Math.round(processingFee),
+    netDisbursedAmount:
+      Math.round(netDisbursedAmount),
+    monthlyEmi:
+      Math.round(monthlyEmi),
+    totalPayment:
+      Math.round(totalPayment),
+    totalInterest:
+      Math.round(totalInterest),
+    estimatedApr,
+  };
+}
+
+==================================================
+FILE: src/engine/borrowerAnalyzer.ts
+==================================================
+import type { BorrowerProfile } from "../types/borrower";
+
+import {
+  calculateAffordableLoanAmount,
+  calculateEmi,
+} from "./emiCalculator";
+
+import {
+  calculateEffectiveApr,
+} from "./aprCalculator";
+
+import {
+  calculateUsableIncome,
+  type IncomeCalculationResult,
+} from "./incomeCalculator";
+
+import {
+  calculateProfileAffordability,
+  type AffordabilityResult,
+} from "./affordabilityCalculator";
+
+import {
+  runStressTest,
+  type StressTestResult,
+} from "./stressTest";
+
+import {
+  calculateBorrowingDecision,
+  type BorrowingDecisionResult,
+} from "../rules/borrowingDecision";
+
+import {
+  calculateEligibility,
+  type EligibilityResult,
+} from "../rules/eligibility";
+
+import {
+  calculateInterestRate,
+  type InterestRateResult,
+} from "../rules/interestRate";
+
+import {
+  generateNegotiationStrategy,
+  type NegotiationResult,
+} from "../rules/negotiation";
+
+import {
+  getLoanProduct,
+} from "../data/loanProducts";
+
+export interface BorrowerAnalysisResult {
+  profile: BorrowerProfile;
+
+  income: IncomeCalculationResult;
+
+  affordability: AffordabilityResult;
+
+  eligibility: EligibilityResult;
+
+  interestRate: InterestRateResult;
+
+  negotiation: NegotiationResult;
+
+  requestedLoan: {
+    amount: number;
+    interestRate: number;
+    tenureMonths: number;
+    monthlyEmi: number;
+  };
+
+  affordableLoanAmount: number;
+
+  apr: {
+    processingFee: number;
+    netDisbursedAmount: number;
+    totalPayment: number;
+    totalInterest: number;
+    estimatedApr: number;
+  };
+
+  stressTest: StressTestResult;
+
+  decision: BorrowingDecisionResult;
+}
+
+/**
+ * Main borrower analysis pipeline.
+ *
+ * Loan Product
+ * ↓
+ * Interest Rate
+ * ↓
+ * Income Analysis
+ * ↓
+ * Affordability
+ * ↓
+ * Lender Eligibility
+ * ↓
+ * APR
+ * ↓
+ * Stress Test
+ * ↓
+ * Borrowing Decision
+ * ↓
+ * Negotiation Strategy
+ */
+export function analyzeBorrower(
+  profile: BorrowerProfile,
+): BorrowerAnalysisResult {
+  /*
+   * ==================================
+   * 1. LOAN PRODUCT
+   * ==================================
+   */
+
+  const loanProduct = getLoanProduct(
+    profile.loanPurpose,
+  );
+
+  const requestedLoanAmount =
+    profile.requestedAmount ?? 0;
+
+  const tenureMonths =
+    loanProduct.tenureMonths;
+
+  const processingFeePercentage =
+    loanProduct.processingFeePercentage;
+
+  /*
+   * ==================================
+   * 2. INTEREST RATE RANGE
+   * ==================================
+   */
+
+  const interestRate =
+    calculateInterestRate({
+      profile,
+    });
+
+  /*
+   * Midpoint of fair rate range is used
+   * for EMI and APR calculations.
+   */
+
+  const annualInterestRate =
+    Number(
+      (
+        (interestRate.fairRateMin +
+          interestRate.fairRateMax) /
+        2
+      ).toFixed(2),
+    );
+
+  /*
+   * ==================================
+   * 3. NORMALIZE INCOME
+   * ==================================
+   */
+
+  const income =
+    calculateUsableIncome(profile);
+
+  /*
+   * ==================================
+   * 4. BORROWER AFFORDABILITY
+   * ==================================
+   */
+
+  const affordability =
+    calculateProfileAffordability(
+      profile,
+      income.usableMonthlyIncome,
+    );
+
+  /*
+   * ==================================
+   * 5. REQUESTED EMI
+   * ==================================
+   */
+
+  const requestedEmiResult =
+    calculateEmi({
+      principal: requestedLoanAmount,
+      annualInterestRate,
+      tenureMonths,
+    });
+
+  /*
+   * ==================================
+   * 6. SAFE BORROWING AMOUNT
+   * ==================================
+   */
+
+  const affordableLoanAmount =
+    calculateAffordableLoanAmount(
+      affordability.safeMonthlyEmi,
+      annualInterestRate,
+      tenureMonths,
+    );
+
+  /*
+   * ==================================
+   * 7. LENDER ELIGIBILITY
+   * ==================================
+   */
+
+  const eligibility =
+    calculateEligibility({
+      profile,
+      affordableLoanAmount,
+    });
+
+  /*
+   * ==================================
+   * 8. ALL-IN APR
+   * ==================================
+   */
+
+  const aprResult =
+    calculateEffectiveApr({
+      principal: requestedLoanAmount,
+      annualInterestRate,
+      tenureMonths,
+      processingFeePercentage,
+    });
+
+  /*
+   * ==================================
+   * 9. STRESS TEST
+   * ==================================
+   */
+
+  const stressTest =
+    runStressTest({
+      monthlyIncome:
+        income.usableMonthlyIncome,
+
+      monthlyEmi:
+        requestedEmiResult.monthlyEmi,
+
+      safeEmiPercentage:
+        affordability.safetyAdjustmentPercentage,
+    });
+
+  /*
+   * ==================================
+   * 10. FINAL BORROWING DECISION
+   * ==================================
+   */
+
+  const decision =
+    calculateBorrowingDecision({
+      requestedLoanAmount,
+
+      affordableLoanAmount,
+
+      safeMonthlyEmi:
+        affordability.safeMonthlyEmi,
+
+      requestedMonthlyEmi:
+        requestedEmiResult.monthlyEmi,
+
+      creditScore:
+        profile.creditScore,
+
+      hasRecentMissedPayment:
+        profile.recentMissedPayment ?? false,
+
+      incomeReliability:
+        income.incomeReliability,
+
+      stressTestPassed:
+        stressTest.worstCaseAffordable,
+    });
+
+  /*
+   * ==================================
+   * 11. NEGOTIATION STRATEGY
+   * ==================================
+   */
+
+  const negotiation =
+    generateNegotiationStrategy({
+      profile,
+
+      decision,
+
+      affordableLoanAmount,
+
+      likelySanctionAmount:
+        eligibility.likelySanctionAmount,
+
+      fairRateMin:
+        interestRate.fairRateMin,
+
+      fairRateMax:
+        interestRate.fairRateMax,
+
+      safeMonthlyEmi:
+        affordability.safeMonthlyEmi,
+
+      requestedMonthlyEmi:
+        requestedEmiResult.monthlyEmi,
+    });
+
+  return {
+    profile,
+
+    income,
+
+    affordability,
+
+    eligibility,
+
+    interestRate,
+
+    negotiation,
+
+    requestedLoan: {
+      amount: requestedLoanAmount,
+
+      interestRate:
+        annualInterestRate,
+
+      tenureMonths,
+
+      monthlyEmi:
+        requestedEmiResult.monthlyEmi,
+    },
+
+    affordableLoanAmount,
+
+    apr: {
+      processingFee:
+        aprResult.processingFee,
+
+      netDisbursedAmount:
+        aprResult.netDisbursedAmount,
+
+      totalPayment:
+        aprResult.totalPayment,
+
+      totalInterest:
+        aprResult.totalInterest,
+
+      estimatedApr:
+        aprResult.estimatedApr,
+    },
+
+    stressTest,
+
+    decision,
+  };
+}
+
+==================================================
+FILE: src/engine/questionFlow.ts
+==================================================
+import type { Question } from "../questions/mustQuestions";
+import type { BorrowerProfile } from "../types/borrower";
+
+import { mustQuestions } from "../questions/mustQuestions";
+import { adaptiveQuestions } from "../questions/adaptiveQuestions";
+
+export type AnswerValue = string | number | boolean | undefined;
+
+/**
+ * Returns true when a question should be visible
+ * for the current borrower profile.
+ */
+export function shouldShowQuestion(
+  question: Question,
+  profile: BorrowerProfile,
+): boolean {
+  if (!question.dependsOn) {
+    return true;
+  }
+
+  const { questionId, value } = question.dependsOn;
+
+  const currentValue =
+    profile[questionId as keyof BorrowerProfile];
+
+  return currentValue === value;
+}
+
+/**
+ * Returns all currently visible questions.
+ *
+ * Must questions are always evaluated first.
+ * Adaptive questions are shown based on previous answers.
+ */
+export function getVisibleQuestions(
+  profile: BorrowerProfile,
+): Question[] {
+  const allQuestions = [
+    ...mustQuestions,
+    ...adaptiveQuestions,
+  ];
+
+  return allQuestions.filter((question) =>
+    shouldShowQuestion(question, profile),
+  );
+}
+
+/**
+ * Updates a single borrower answer.
+ *
+ * The function returns a new object instead of
+ * mutating the existing borrower profile.
+ */
+export function updateBorrowerAnswer(
+  profile: BorrowerProfile,
+  questionId: string,
+  value: AnswerValue,
+): BorrowerProfile {
+  return {
+    ...profile,
+    [questionId]: value,
+  };
+}
+
+/**
+ * Checks whether a question has been answered.
+ */
+export function hasAnswer(
+  profile: BorrowerProfile,
+  questionId: string,
+): boolean {
+  const value =
+    profile[questionId as keyof BorrowerProfile];
+
+  return (
+    value !== undefined &&
+    value !== null
+  );
+}
+
+/**
+ * Checks whether the current question can be submitted.
+ */
+export function isQuestionValid(
+  question: Question,
+  profile: BorrowerProfile,
+): boolean {
+  if (!question.required) {
+    return true;
+  }
+
+  return hasAnswer(profile, question.id);
+}
+
+==================================================
+FILE: src/engine/incomeCalculator.ts
+==================================================
+import type {
+  BorrowerProfile,
+  IncomeType,
+} from "../types/borrower";
+
+export interface IncomeCalculationResult {
+  incomeType: IncomeType | "unknown";
+
+  /**
+   * Income used by the lending engine.
+   *
+   * This can be more conservative than the
+   * borrower-reported monthly income.
+   */
+  usableMonthlyIncome: number;
+
+  /**
+   * Original monthly income reported by borrower.
+   */
+  reportedMonthlyIncome: number;
+
+  /**
+   * Indicates how the usable income was calculated.
+   */
+  calculationMethod: string;
+
+  /**
+   * Reliability level of the income estimate.
+   */
+  incomeReliability: "high" | "medium" | "low";
+}
+
+/**
+ * Converts annual income into monthly income.
+ */
+function annualToMonthlyIncome(
+  annualIncome: number,
+): number {
+  if (annualIncome <= 0) {
+    return 0;
+  }
+
+  return annualIncome / 12;
+}
+
+/**
+ * Calculates normalized income for different
+ * borrower income types.
+ */
+export function calculateUsableIncome(
+  profile: BorrowerProfile,
+): IncomeCalculationResult {
+  const incomeType = profile.incomeType;
+
+  const reportedMonthlyIncome =
+    profile.monthlyIncome ?? 0;
+
+  /*
+   * ============================
+   * SALARIED BORROWER
+   * ============================
+   */
+  if (incomeType === "salaried") {
+    return {
+      incomeType,
+      usableMonthlyIncome: Math.round(
+        reportedMonthlyIncome,
+      ),
+      reportedMonthlyIncome,
+      calculationMethod:
+        "Using reported monthly net salary.",
+      incomeReliability: "high",
+    };
+  }
+
+  /*
+   * ============================
+   * SELF-EMPLOYED BORROWER
+   * ============================
+   *
+   * Compare reported monthly income
+   * with ITR-based monthly income.
+   *
+   * Use the lower value conservatively.
+   */
+  if (incomeType === "self_employed") {
+    const itrMonthlyIncome =
+      annualToMonthlyIncome(
+        profile.annualItrIncome ?? 0,
+      );
+
+    const usableMonthlyIncome =
+      itrMonthlyIncome > 0
+        ? Math.min(
+            reportedMonthlyIncome,
+            itrMonthlyIncome,
+          )
+        : reportedMonthlyIncome;
+
+    return {
+      incomeType,
+      usableMonthlyIncome: Math.round(
+        usableMonthlyIncome,
+      ),
+      reportedMonthlyIncome,
+      calculationMethod:
+        itrMonthlyIncome > 0
+          ? "Using the lower of reported income and ITR-based monthly income."
+          : "Using reported monthly income because ITR income was unavailable.",
+      incomeReliability:
+        itrMonthlyIncome > 0
+          ? "medium"
+          : "low",
+    };
+  }
+
+  /*
+   * ============================
+   * INFORMAL / VARIABLE INCOME
+   * ============================
+   *
+   * Use the lowest typical monthly income
+   * for a conservative affordability estimate.
+   */
+  if (incomeType === "informal") {
+    const minimumIncome =
+      profile.minimumMonthlyIncome ??
+      reportedMonthlyIncome;
+
+    const maximumIncome =
+      profile.maximumMonthlyIncome ??
+      reportedMonthlyIncome;
+
+    /*
+     * Conservative income calculation:
+     * 70% of minimum + 30% of maximum.
+     *
+     * This avoids using the highest income
+     * while still considering typical variation.
+     */
+    const usableMonthlyIncome =
+      minimumIncome * 0.7 +
+      maximumIncome * 0.3;
+
+    return {
+      incomeType,
+      usableMonthlyIncome: Math.round(
+        usableMonthlyIncome,
+      ),
+      reportedMonthlyIncome,
+      calculationMethod:
+        "Using a conservative weighted income estimate based on lower and higher typical income.",
+      incomeReliability: "low",
+    };
+  }
+
+  /*
+   * ============================
+   * UNKNOWN INCOME TYPE
+   * ============================
+   */
+  return {
+    incomeType: "unknown",
+    usableMonthlyIncome: 0,
+    reportedMonthlyIncome,
+    calculationMethod:
+      "Income type was not available.",
+    incomeReliability: "low",
+  };
+}
+
+==================================================
+FILE: src/engine/recommendationEngine.ts
+==================================================
+import type { BorrowerAnalysisResult } from "./borrowerAnalyzer";
+
+export type RecommendationPriority =
+  | "high"
+  | "medium"
+  | "low";
+
+export interface BorrowerRecommendation {
+  id: string;
+  priority: RecommendationPriority;
+  title: string;
+  description: string;
+}
+
+export interface RecommendationResult {
+  recommendations: BorrowerRecommendation[];
+}
+
+/**
+ * Generates actionable recommendations based on
+ * the complete borrower analysis.
+ */
+export function generateRecommendations(
+  analysis: BorrowerAnalysisResult,
+): RecommendationResult {
+  const recommendations: BorrowerRecommendation[] = [];
+
+  const {
+    requestedLoan,
+    affordability,
+    decision,
+    stressTest,
+    income,
+    apr,
+  } = analysis;
+
+  /*
+   * ==================================
+   * 1. LOAN AMOUNT REDUCTION
+   * ==================================
+   */
+
+  if (
+    decision.recommendedLoanAmount <
+    requestedLoan.amount
+  ) {
+    const amountToReduce =
+      requestedLoan.amount -
+      decision.recommendedLoanAmount;
+
+    recommendations.push({
+      id: "reduce-loan",
+      priority: "high",
+      title: "Consider borrowing less",
+      description:
+        `Your requested amount is above the calculated affordability limit. ` +
+        `Consider reducing your borrowing by ₹${Math.round(
+          amountToReduce,
+        ).toLocaleString("en-IN")}.`,
+    });
+  }
+
+  /*
+   * ==================================
+   * 2. EMI REDUCTION
+   * ==================================
+   */
+
+  if (
+    requestedLoan.monthlyEmi >
+    affordability.safeMonthlyEmi
+  ) {
+    const emiDifference =
+      requestedLoan.monthlyEmi -
+      affordability.safeMonthlyEmi;
+
+    recommendations.push({
+      id: "reduce-emi",
+      priority: "high",
+      title: "Reduce your monthly EMI pressure",
+      description:
+        `Your current EMI is ₹${Math.round(
+          emiDifference,
+        ).toLocaleString(
+          "en-IN",
+        )} above your calculated safe monthly limit. ` +
+        `Consider reducing the loan amount or extending the repayment tenure.`,
+    });
+  }
+
+  /*
+   * ==================================
+   * 3. STRESS TEST
+   * ==================================
+   */
+
+  if (!stressTest.worstCaseAffordable) {
+    recommendations.push({
+      id: "income-stress",
+      priority: "high",
+      title: "Build a buffer for income changes",
+      description:
+        "Your proposed EMI did not remain affordable in all tested income-drop scenarios. Consider keeping a larger monthly buffer before taking this loan.",
+    });
+  }
+
+  /*
+   * ==================================
+   * 4. EMERGENCY SAVINGS
+   * ==================================
+   */
+
+  const savingsMonths =
+    analysis.profile.emergencySavingsMonths ?? 0;
+
+  if (savingsMonths < 3) {
+    recommendations.push({
+      id: "emergency-savings",
+      priority: "medium",
+      title: "Strengthen your emergency savings",
+      description:
+        "You currently have less than three months of emergency savings. Building a larger buffer may reduce financial pressure during unexpected events.",
+    });
+  }
+
+  /*
+   * ==================================
+   * 5. INCOME RELIABILITY
+   * ==================================
+   */
+
+  if (income.incomeReliability === "low") {
+    recommendations.push({
+      id: "income-stability",
+      priority: "medium",
+      title: "Plan conservatively for variable income",
+      description:
+        "Your income appears variable. Consider basing your repayment plan on your lower typical income rather than your highest earning months.",
+    });
+  }
+
+  /*
+   * ==================================
+   * 6. APR / PROCESSING COST
+   * ==================================
+   */
+
+  if (
+    apr.estimatedApr >
+    requestedLoan.interestRate + 1
+  ) {
+    recommendations.push({
+      id: "compare-apr",
+      priority: "low",
+      title: "Compare the effective borrowing cost",
+      description:
+        "Processing fees increase your effective borrowing cost. Compare APR and total repayment cost instead of looking only at the advertised interest rate.",
+    });
+  }
+
+  /*
+   * ==================================
+   * DEFAULT POSITIVE RECOMMENDATION
+   * ==================================
+   */
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      id: "maintain-buffer",
+      priority: "low",
+      title: "Maintain your financial buffer",
+      description:
+        "Your current borrowing request appears to fit within the calculated affordability limits. Continue maintaining savings for unexpected expenses.",
+    });
+  }
+
+  return {
+    recommendations,
+  };
+}
+
+==================================================
+FILE: src/engine/stressTest.ts
+==================================================
+export interface StressTestInput {
+  monthlyIncome: number;
+  monthlyEmi: number;
+
+  /**
+   * Maximum percentage of monthly income
+   * that should be used for EMI.
+   *
+   * Example:
+   * 40 means EMI should not exceed
+   * 40% of stressed income.
+   */
+  safeEmiPercentage?: number;
+
+  /**
+   * Income drop scenarios.
+   *
+   * Example:
+   * [10, 20, 30]
+   */
+  incomeDropPercentages?: number[];
+}
+
+export interface StressScenario {
+  incomeDropPercentage: number;
+  stressedIncome: number;
+  emiToIncomeRatio: number;
+  safeEmiLimit: number;
+  remainingIncome: number;
+  isAffordable: boolean;
+}
+
+export interface StressTestResult {
+  currentIncome: number;
+  monthlyEmi: number;
+  safeEmiPercentage: number;
+  scenarios: StressScenario[];
+  worstCaseAffordable: boolean;
+}
+
+/**
+ * Tests whether the borrower can continue
+ * paying the EMI after different income drops.
+ */
+export function runStressTest({
+  monthlyIncome,
+  monthlyEmi,
+  safeEmiPercentage = 40,
+  incomeDropPercentages = [10, 20, 30],
+}: StressTestInput): StressTestResult {
+  if (monthlyIncome <= 0) {
+    throw new Error(
+      "Monthly income must be greater than zero.",
+    );
+  }
+
+  if (monthlyEmi < 0) {
+    throw new Error(
+      "Monthly EMI cannot be negative.",
+    );
+  }
+
+  if (
+    safeEmiPercentage <= 0 ||
+    safeEmiPercentage > 100
+  ) {
+    throw new Error(
+      "Safe EMI percentage must be between 1 and 100.",
+    );
+  }
+
+  const scenarios = incomeDropPercentages.map(
+    (incomeDropPercentage) => {
+      if (
+        incomeDropPercentage < 0 ||
+        incomeDropPercentage >= 100
+      ) {
+        throw new Error(
+          "Income drop percentage must be between 0 and 99.",
+        );
+      }
+
+      const stressedIncome =
+        monthlyIncome *
+        (1 - incomeDropPercentage / 100);
+
+      const safeEmiLimit =
+        stressedIncome *
+        (safeEmiPercentage / 100);
+
+      const remainingIncome =
+        stressedIncome - monthlyEmi;
+
+      const emiToIncomeRatio =
+        stressedIncome > 0
+          ? (monthlyEmi / stressedIncome) * 100
+          : 100;
+
+      return {
+        incomeDropPercentage,
+        stressedIncome: Math.round(stressedIncome),
+        emiToIncomeRatio: Number(
+          emiToIncomeRatio.toFixed(2),
+        ),
+        safeEmiLimit: Math.round(safeEmiLimit),
+        remainingIncome: Math.round(
+          remainingIncome,
+        ),
+        isAffordable:
+          monthlyEmi <= safeEmiLimit,
+      };
+    },
+  );
+
+  return {
+    currentIncome: monthlyIncome,
+    monthlyEmi,
+    safeEmiPercentage,
+    scenarios,
+    worstCaseAffordable: scenarios.every(
+      (scenario) => scenario.isAffordable,
+    ),
+  };
+}
+
+/**
+ * Returns the highest income drop percentage
+ * that the borrower can safely handle.
+ */
+export function getMaximumSafeIncomeDrop(
+  stressTestResult: StressTestResult,
+): number {
+  const affordableScenarios =
+    stressTestResult.scenarios.filter(
+      (scenario) => scenario.isAffordable,
+    );
+
+  if (affordableScenarios.length === 0) {
+    return 0;
+  }
+
+  return Math.max(
+    ...affordableScenarios.map(
+      (scenario) =>
+        scenario.incomeDropPercentage,
+    ),
+  );
+}
+
+==================================================
+FILE: src/index.css
+==================================================
+@import "tailwindcss";
+
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+
+  color: #1f1b1d;
+  background: #faf9f8;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #faf9f8;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: #e9dce4;
+  color: #3f1f35;
+}
+
+/* ========================================
+   PRINT STYLES — BORROWER NEGOTIATION CARD
+======================================== */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-negotiation-card,
+  .print-negotiation-card * {
+    visibility: visible;
+  }
+
+  .print-negotiation-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  button {
+    display: none !important;
+  }
+}
+
+==================================================
+FILE: src/components/NegotiationCard.tsx
+==================================================
+import {
+  Download,
+  Landmark,
+  ShieldCheck,
+  MessageSquareText,
+} from "lucide-react";
+
+import type { BorrowerAnalysisResult } from "../engine/borrowerAnalyzer";
+
+interface NegotiationCardProps {
+  analysis: BorrowerAnalysisResult;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export default function NegotiationCard({
+  analysis,
+}: NegotiationCardProps) {
+  const {
+    decision,
+    affordability,
+    apr,
+    negotiation,
+  } = analysis;
+
+  const recommendationText =
+    decision.recommendation === "BORROW"
+      ? "The requested borrowing level appears to be within the calculated affordability range."
+      : decision.recommendation === "BORROW_LESS"
+        ? "A lower borrowing amount may better match the calculated affordability range."
+        : "The current borrowing request may create significant financial pressure.";
+
+  return (
+    <section className="print-negotiation-card overflow-hidden rounded-3xl border border-[#4B2440] bg-[#4B2440] text-white shadow-sm">
+      {/* Header */}
+      <div className="border-b border-white/15 p-6 sm:p-8">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/60">
+              <Landmark size={15} />
+
+              Borrower Copilot
+            </div>
+
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight">
+              Negotiation Card
+            </h2>
+
+            <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
+              A transparent affordability summary you can
+              use before discussing loan terms with a lender.
+            </p>
+          </div>
+
+          <div className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold">
+            Self-assessment
+          </div>
+        </div>
+      </div>
+
+      {/* Core Metrics */}
+      <div className="grid gap-6 p-6 sm:grid-cols-2 sm:p-8">
+        <CardMetric
+          label="Recommended borrowing limit"
+          value={formatCurrency(
+            decision.recommendedLoanAmount,
+          )}
+        />
+
+        <CardMetric
+          label="Safe monthly EMI"
+          value={formatCurrency(
+            affordability.safeMonthlyEmi,
+          )}
+        />
+
+        <CardMetric
+          label="Estimated APR"
+          value={`${apr.estimatedApr}%`}
+        />
+
+        <CardMetric
+          label="Requested loan amount"
+          value={formatCurrency(
+            analysis.requestedLoan.amount,
+          )}
+        />
+      </div>
+
+      {/* Assessment Recommendation */}
+      <div className="mx-6 rounded-2xl bg-white/10 p-5 sm:mx-8">
+        <div className="flex gap-3">
+          <ShieldCheck
+            size={20}
+            className="mt-0.5 shrink-0 text-white"
+          />
+
+          <div>
+            <p className="text-sm font-semibold">
+              Assessment recommendation
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-white/70">
+              {recommendationText}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Negotiation Strategy */}
+      <div className="p-6 sm:p-8">
+        <div className="flex items-center gap-2">
+          <MessageSquareText
+            size={18}
+            className="text-white/70"
+          />
+
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">
+            Your negotiation strategy
+          </p>
+        </div>
+
+        <h3 className="mt-4 text-xl font-semibold">
+          {negotiation.headline}
+        </h3>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
+          {negotiation.summary}
+        </p>
+
+        {negotiation.suggestions.length > 0 && (
+          <div className="mt-6 space-y-4">
+            {negotiation.suggestions.map(
+              (suggestion, index) => (
+                <div
+                  key={`${suggestion.title}-${index}`}
+                  className="rounded-2xl border border-white/15 bg-white/5 p-5"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h4 className="text-sm font-semibold">
+                        {suggestion.title}
+                      </h4>
+
+                      <p className="mt-2 text-sm leading-6 text-white/70">
+                        {suggestion.description}
+                      </p>
+                    </div>
+
+                    <PriorityBadge
+                      priority={suggestion.priority}
+                    />
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Talking Points */}
+      <div className="border-t border-white/15 p-6 sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">
+          Questions to discuss with your lender
+        </p>
+
+        <ul className="mt-4 space-y-3 text-sm text-white/80">
+          <li>
+            • Can the interest rate be improved based on my
+            financial profile?
+          </li>
+
+          <li>
+            • What fees are included beyond the stated
+            interest rate?
+          </li>
+
+          <li>
+            • What will be the total amount I repay over the
+            full loan tenure?
+          </li>
+
+          <li>
+            • Can the EMI be adjusted to remain within my safe
+            monthly limit?
+          </li>
+        </ul>
+      </div>
+
+      {/* Footer */}
+      <div className="flex flex-col gap-4 border-t border-white/15 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+        <p className="max-w-xl text-xs leading-5 text-white/50">
+          This is an educational affordability assessment,
+          not a loan approval or financial guarantee.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#4B2440] transition hover:bg-white/90"
+        >
+          <Download size={16} />
+
+          Save / Print
+        </button>
+      </div>
+    </section>
+  );
+}
+
+interface CardMetricProps {
+  label: string;
+  value: string;
+}
+
+function CardMetric({
+  label,
+  value,
+}: CardMetricProps) {
+  return (
+    <div className="rounded-2xl border border-white/15 bg-white/5 p-5">
+      <p className="text-xs text-white/55">
+        {label}
+      </p>
+
+      <p className="mt-2 text-xl font-semibold">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+interface PriorityBadgeProps {
+  priority: "HIGH" | "MEDIUM" | "LOW";
+}
+
+function PriorityBadge({
+  priority,
+}: PriorityBadgeProps) {
+  const priorityStyles = {
+    HIGH: "bg-white text-[#4B2440]",
+    MEDIUM:
+      "border border-white/25 bg-white/10 text-white",
+    LOW:
+      "border border-white/15 bg-transparent text-white/70",
+  };
+
+  return (
+    <span
+      className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold tracking-[0.12em] ${priorityStyles[priority]}`}
+    >
+      {priority}
+    </span>
+  );
+}
+
+==================================================
+FILE: src/components/QuestionCard.tsx
+==================================================
+import type { Question } from "../questions/mustQuestions";
+import QuestionOption from "./QuestionOption";
+
+interface QuestionCardProps {
+  question: Question;
+  value: string | number | boolean | undefined;
+  onChange: (value: string | number) => void;
+}
+
+export default function QuestionCard({
+  question,
+  value,
+  onChange,
+}: QuestionCardProps) {
+  const selectedValue = String(value ?? "");
+
+  const isSelectionQuestion =
+    question.type === "single_select" ||
+    question.type === "yes_no";
+
+  return (
+    <section className="w-full">
+      {/* Question number area */}
+      <div className="mb-8">
+        <div className="mb-4 inline-flex items-center rounded-full bg-[#F4EDF1] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#643652]">
+          Borrower assessment
+        </div>
+
+        <h1 className="max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.03em] text-[#211A1E] sm:text-4xl">
+          {question.title}
+        </h1>
+
+        {question.description && (
+          <p className="mt-4 max-w-2xl text-base leading-7 text-[#756A70]">
+            {question.description}
+          </p>
+        )}
+      </div>
+
+      {/* Selection Questions */}
+      {isSelectionQuestion && question.options && (
+        <div className="grid gap-3">
+          {question.options.map((option) => (
+            <QuestionOption
+              key={option.value}
+              option={option}
+              selected={selectedValue === option.value}
+              onSelect={onChange}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Number Input */}
+      {question.type === "number" && (
+        <div className="max-w-xl">
+          <div className="relative">
+            {question.prefix && (
+              <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-lg font-semibold text-[#756A70]">
+                {question.prefix}
+              </span>
+            )}
+
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={selectedValue}
+              placeholder={question.placeholder}
+              onChange={(event) => {
+                const inputValue = event.target.value;
+
+                onChange(
+                  inputValue === ""
+                    ? ""
+                    : Number(inputValue),
+                );
+              }}
+              className={`w-full rounded-2xl border bg-white px-5 py-5 text-xl font-medium text-[#211A1E] outline-none transition placeholder:text-[#B0A5AA] focus:border-[#4B2440] focus:ring-4 focus:ring-[#4B2440]/10 ${
+                question.prefix ? "pl-10" : ""
+              } ${question.suffix ? "pr-24" : ""}`}
+            />
+
+            {question.suffix && (
+              <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-sm font-medium text-[#756A70]">
+                {question.suffix}
+              </span>
+            )}
+          </div>
+
+          {question.prefix === "₹" && (
+            <p className="mt-3 text-sm text-[#84777E]">
+              Enter the amount in Indian rupees.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+==================================================
+FILE: src/components/ProgressBar.tsx
+==================================================
+interface ProgressBarProps {
+  current: number;
+  total: number;
+}
+
+export default function ProgressBar({
+  current,
+  total,
+}: ProgressBarProps) {
+  const safeTotal = Math.max(total, 1);
+
+  const progress = Math.min(
+    Math.max((current / safeTotal) * 100, 0),
+    100,
+  );
+
+  return (
+    <div className="w-full">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-medium text-[#756A70]">
+          Assessment progress
+        </p>
+
+        <p className="text-sm font-semibold text-[#4B2440]">
+          {current} of {total}
+        </p>
+      </div>
+
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-[#ECE6E9]"
+        aria-label="Assessment progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        role="progressbar"
+      >
+        <div
+          className="h-full rounded-full bg-[#4B2440] transition-all duration-300 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+==================================================
+FILE: src/components/AssessmentSummary.tsx
+==================================================
+import {
+  Check,
+  Copy,
+  Share2,
+} from "lucide-react";
+import { useState } from "react";
+
+import type { BorrowerAnalysisResult } from "../engine/borrowerAnalyzer";
+
+interface AssessmentSummaryProps {
+  analysis: BorrowerAnalysisResult;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export default function AssessmentSummary({
+  analysis,
+}: AssessmentSummaryProps) {
+  const [copied, setCopied] = useState(false);
+
+  const summary = `
+Borrower Copilot — Assessment Summary
+
+Recommendation: ${analysis.decision.recommendation.replace(
+    /_/g,
+    " ",
+  )}
+
+Requested amount: ${formatCurrency(
+    analysis.requestedLoan.amount,
+  )}
+
+Recommended amount: ${formatCurrency(
+    analysis.decision.recommendedLoanAmount,
+  )}
+
+Requested EMI: ${formatCurrency(
+    analysis.requestedLoan.monthlyEmi,
+  )}
+
+Safe monthly EMI: ${formatCurrency(
+    analysis.affordability.safeMonthlyEmi,
+  )}
+
+Estimated APR: ${analysis.apr.estimatedApr}%
+
+Confidence: ${analysis.decision.confidenceScore}%
+
+This is an educational affordability assessment and not a loan approval.
+`.trim();
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(summary);
+
+      setCopied(true);
+
+      window.setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  async function handleShare() {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Borrower Copilot Assessment",
+          text: summary,
+        });
+      } catch {
+        // User cancelled sharing.
+      }
+
+      return;
+    }
+
+    await handleCopy();
+  }
+
+  return (
+    <section className="rounded-2xl border border-[#E6DFE2] bg-white p-6 sm:p-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">
+            Assessment summary
+          </h3>
+
+          <p className="mt-2 text-sm leading-6 text-[#756A70]">
+            Save or share a concise summary of your
+            borrowing assessment.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#DED3D9] px-4 py-2.5 text-sm font-semibold text-[#643652] transition hover:bg-[#F8F3F6]"
+          >
+            {copied ? (
+              <>
+                <Check size={16} />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy size={16} />
+                Copy
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#4B2440] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#643652]"
+          >
+            <Share2 size={16} />
+            Share
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-[#EAE4E6] bg-[#FAF9F8] p-5">
+        <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-[#756A70]">
+          {summary}
+        </pre>
+      </div>
+    </section>
+  );
+}
+
+==================================================
+FILE: src/components/PlanComparison.tsx
+==================================================
+import {
+  ArrowDownRight,
+  CheckCircle2,
+  ShieldCheck,
+} from "lucide-react";
+
+import type { BorrowerAnalysisResult } from "../engine/borrowerAnalyzer";
+
+interface PlanComparisonProps {
+  analysis: BorrowerAnalysisResult;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export default function PlanComparison({
+  analysis,
+}: PlanComparisonProps) {
+  const requestedAmount =
+    analysis.requestedLoan.amount;
+
+  const recommendedAmount =
+    analysis.decision.recommendedLoanAmount;
+
+  const requestedEmi =
+    analysis.requestedLoan.monthlyEmi;
+
+  const safeEmi =
+    analysis.affordability.safeMonthlyEmi;
+
+  const amountDifference = Math.max(
+    requestedAmount - recommendedAmount,
+    0,
+  );
+
+  const emiDifference = Math.max(
+    requestedEmi - safeEmi,
+    0,
+  );
+
+  const isAlreadySafe =
+    analysis.decision.recommendation === "BORROW";
+
+  return (
+    <section className="rounded-2xl border border-[#E6DFE2] bg-white p-6 sm:p-7">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">
+            Requested plan vs safer plan
+          </h3>
+
+          <p className="mt-2 text-sm leading-6 text-[#756A70]">
+            Compare your current borrowing request with a
+            more conservative affordability-based option.
+          </p>
+        </div>
+
+        {isAlreadySafe ? (
+          <div className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 size={14} />
+            Within safe range
+          </div>
+        ) : (
+          <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[#F3EEF1] px-3 py-1.5 text-xs font-semibold text-[#643652]">
+            <ShieldCheck size={14} />
+            Safer alternative
+          </div>
+        )}
+      </div>
+
+      <div className="mt-7 grid gap-4 md:grid-cols-2">
+        {/* Requested Plan */}
+        <div className="rounded-2xl border border-[#EAE4E6] bg-[#FAF9F8] p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#756A70]">
+            Your requested plan
+          </p>
+
+          <div className="mt-5 space-y-5">
+            <PlanMetric
+              label="Loan amount"
+              value={formatCurrency(requestedAmount)}
+            />
+
+            <PlanMetric
+              label="Monthly EMI"
+              value={formatCurrency(requestedEmi)}
+            />
+          </div>
+        </div>
+
+        {/* Safer Plan */}
+        <div className="rounded-2xl border border-[#4B2440] bg-[#F8F3F6] p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#643652]">
+            Recommended safer plan
+          </p>
+
+          <div className="mt-5 space-y-5">
+            <PlanMetric
+              label="Loan amount"
+              value={formatCurrency(recommendedAmount)}
+              highlight
+            />
+
+            <PlanMetric
+              label="Safe monthly EMI"
+              value={formatCurrency(safeEmi)}
+              highlight
+            />
+          </div>
+        </div>
+      </div>
+
+      {!isAlreadySafe && (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex gap-3">
+            <ArrowDownRight
+              size={19}
+              className="mt-0.5 shrink-0 text-amber-700"
+            />
+
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                What changes with the safer plan?
+              </p>
+
+              <div className="mt-2 space-y-1 text-sm leading-6 text-amber-800">
+                {amountDifference > 0 && (
+                  <p>
+                    Borrow{" "}
+                    {formatCurrency(amountDifference)} less.
+                  </p>
+                )}
+
+                {emiDifference > 0 && (
+                  <p>
+                    Reduce monthly EMI pressure by{" "}
+                    {formatCurrency(emiDifference)}.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface PlanMetricProps {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}
+
+function PlanMetric({
+  label,
+  value,
+  highlight = false,
+}: PlanMetricProps) {
+  return (
+    <div className="flex items-end justify-between gap-4">
+      <span className="text-sm text-[#756A70]">
+        {label}
+      </span>
+
+      <span
+        className={`text-base ${
+          highlight
+            ? "font-semibold text-[#4B2440]"
+            : "font-semibold text-[#211A1E]"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+==================================================
+FILE: src/components/QuestionOption.tsx
+==================================================
+import type { QuestionOption as QuestionOptionType } from "../questions/mustQuestions";
+
+interface QuestionOptionProps {
+  option: QuestionOptionType;
+  selected: boolean;
+  onSelect: (value: string) => void;
+}
+
+export default function QuestionOption({
+  option,
+  selected,
+  onSelect,
+}: QuestionOptionProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(option.value)}
+      className={`group relative w-full rounded-2xl border p-5 text-left transition-all duration-200 ${
+        selected
+          ? "border-[#4B2440] bg-[#F4EDF1] shadow-[0_8px_25px_rgba(75,36,64,0.08)]"
+          : "border-[#E6DFE2] bg-white hover:border-[#B99CAC] hover:bg-[#FCFAFB]"
+      }`}
+    >
+      <div className="flex items-start gap-4">
+        {/* Selection indicator */}
+        <div
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+            selected
+              ? "border-[#4B2440] bg-[#4B2440]"
+              : "border-[#CFC5C9] bg-white group-hover:border-[#8A647C]"
+          }`}
+        >
+          {selected && (
+            <div className="h-2 w-2 rounded-full bg-white" />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="min-w-0">
+          <p
+            className={`font-semibold ${
+              selected ? "text-[#4B2440]" : "text-[#211A1E]"
+            }`}
+          >
+            {option.label}
+          </p>
+
+          {option.description && (
+            <p className="mt-1 text-sm leading-6 text-[#756A70]">
+              {option.description}
+            </p>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+==================================================
+FILE: src/questions/adaptiveQuestions.ts
+==================================================
+import type { Question } from "./mustQuestions";
+export const adaptiveQuestions: Question[] = [
+  /*
+   * =========================
+   * SALARIED BORROWER
+   * =========================
+   */
+
+  {
+    id: "employmentYears",
+    type: "number",
+    title: "How long have you been in your current employment?",
+    description:
+      "Employment stability can affect income reliability and borrowing risk.",
+    required: true,
+    suffix: "years",
+    placeholder: "For example, 3",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "salaried",
+    },
+  },
+
+  {
+    id: "emergencySavingsMonths",
+    type: "number",
+    title: "How many months of expenses can your savings cover?",
+    description:
+      "Savings provide a buffer if your income is temporarily interrupted.",
+    required: true,
+    suffix: "months",
+    placeholder: "For example, 6",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "salaried",
+    },
+  },
+
+  /*
+   * =========================
+   * SELF-EMPLOYED BORROWER
+   * =========================
+   */
+
+  {
+    id: "businessYears",
+    type: "number",
+    title: "How long has your business been operating?",
+    description:
+      "Business stability helps us estimate how reliable your income may be.",
+    required: true,
+    suffix: "years",
+    placeholder: "For example, 4",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "self_employed",
+    },
+  },
+
+  {
+    id: "annualItrIncome",
+    type: "number",
+    title: "What annual income do you report in your latest ITR?",
+    description:
+      "Reported income can be different from average cash flow and helps improve confidence.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 1200000",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "self_employed",
+    },
+  },
+
+  {
+    id: "emergencySavingsMonths",
+    type: "number",
+    title: "How many months of expenses can your savings cover?",
+    description:
+      "Savings can protect your ability to repay during slower business periods.",
+    required: true,
+    suffix: "months",
+    placeholder: "For example, 6",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "self_employed",
+    },
+  },
+
+  /*
+   * =========================
+   * INFORMAL / VARIABLE INCOME
+   * =========================
+   */
+
+  {
+    id: "minimumMonthlyIncome",
+    type: "number",
+    title: "What is your lowest typical monthly income?",
+    description:
+      "We use your lower-income months to avoid making your loan plan too optimistic.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 30000",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "informal",
+    },
+  },
+
+  {
+    id: "maximumMonthlyIncome",
+    type: "number",
+    title: "What is your highest typical monthly income?",
+    description:
+      "This helps us understand how much your income varies.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 70000",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "informal",
+    },
+  },
+
+  {
+    id: "emergencySavingsMonths",
+    type: "number",
+    title: "How many months of expenses can your savings cover?",
+    description:
+      "Savings are especially important when your income varies from month to month.",
+    required: true,
+    suffix: "months",
+    placeholder: "For example, 6",
+    dependsOn: {
+      questionId: "incomeType",
+      value: "informal",
+    },
+  },
+
+  /*
+   * =========================
+   * LOAN-SPECIFIC QUESTIONS
+   * =========================
+   */
+
+  {
+    id: "hasCoApplicant",
+    type: "yes_no",
+    title: "Do you have a co-applicant?",
+    description:
+      "A co-applicant may affect likely eligibility, but we will still calculate your individual safety limit.",
+    required: true,
+    options: [
+      {
+        label: "No",
+        value: "false",
+      },
+      {
+        label: "Yes",
+        value: "true",
+      },
+    ],
+    dependsOn: {
+      questionId: "loanPurpose",
+      value: "home",
+    },
+  },
+
+  {
+    id: "collateralValue",
+    type: "number",
+    title: "What is the approximate value of the collateral?",
+    description:
+      "Enter the estimated market value of the asset you plan to use as collateral.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 1500000",
+    dependsOn: {
+      questionId: "loanPurpose",
+      value: "business",
+    },
+  },
+
+  {
+    id: "upcomingLargeExpense",
+    type: "yes_no",
+    title: "Do you expect a major expense in the next 12 months?",
+    description:
+      "A large upcoming expense can reduce the amount of monthly EMI you can safely carry.",
+    required: true,
+    options: [
+      {
+        label: "No",
+        value: "false",
+      },
+      {
+        label: "Yes",
+        value: "true",
+      },
+    ],
+  },
+];
+
+==================================================
+FILE: src/questions/mustQuestions.ts
+==================================================
+export type QuestionType =
+  | "single_select"
+  | "number"
+  | "yes_no";
+
+export interface QuestionOption {
+  label: string;
+  value: string;
+  description?: string;
+}
+
+export interface Question {
+  id: string;
+  type: QuestionType;
+  title: string;
+  description?: string;
+  required: boolean;
+  placeholder?: string;
+  prefix?: string;
+  suffix?: string;
+  options?: QuestionOption[];
+
+  /**
+   * Used later by the assessment UI to determine
+   * whether a question should be displayed.
+   */
+  dependsOn?: {
+    questionId: string;
+    value: string | boolean;
+  };
+}
+
+export const mustQuestions: Question[] = [
+  {
+    id: "loanPurpose",
+    type: "single_select",
+    title: "What do you need the loan for?",
+    description:
+      "The purpose helps us choose the right affordability and risk rules.",
+    required: true,
+    options: [
+      {
+        label: "Personal expense",
+        value: "personal",
+        description: "Wedding, medical, travel, or other personal expenses.",
+      },
+      {
+        label: "Business",
+        value: "business",
+        description: "Working capital, inventory, expansion, or equipment.",
+      },
+      {
+        label: "Vehicle",
+        value: "vehicle",
+        description: "Two-wheeler, car, commercial vehicle, or EV.",
+      },
+      {
+        label: "Home",
+        value: "home",
+        description: "Buying, building, or improving a home.",
+      },
+      {
+        label: "Education",
+        value: "education",
+        description: "Higher education or professional learning.",
+      },
+      {
+        label: "Other",
+        value: "other",
+      },
+    ],
+  },
+
+  {
+    id: "requestedAmount",
+    type: "number",
+    title: "How much do you want to borrow?",
+    description:
+      "Enter the amount you currently plan to request from a lender.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 800000",
+  },
+
+  {
+    id: "incomeType",
+    type: "single_select",
+    title: "How do you earn your income?",
+    description:
+      "This changes the questions and rules we use for your assessment.",
+    required: true,
+    options: [
+      {
+        label: "Salaried",
+        value: "salaried",
+        description: "You receive a regular salary from an employer.",
+      },
+      {
+        label: "Self-employed",
+        value: "self_employed",
+        description: "You run a business or work independently.",
+      },
+      {
+        label: "Informal or variable income",
+        value: "informal",
+        description:
+          "Your income may vary and may not come from a traditional salary.",
+      },
+    ],
+  },
+
+  {
+    id: "monthlyIncome",
+    type: "number",
+    title: "What is your average monthly net income?",
+    description:
+      "Use the amount you receive after regular deductions.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 110000",
+  },
+
+  {
+    id: "existingEmi",
+    type: "number",
+    title: "What is your total existing monthly EMI?",
+    description:
+      "Include EMIs for all active loans. Enter 0 if you do not currently pay any.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 14000",
+  },
+
+  {
+    id: "monthlyExpenses",
+    type: "number",
+    title: "What are your average monthly household expenses?",
+    description:
+      "Include rent, food, utilities, education, and regular household costs.",
+    required: true,
+    prefix: "₹",
+    placeholder: "For example, 28000",
+  },
+
+  {
+    id: "age",
+    type: "number",
+    title: "How old are you?",
+    description:
+      "Your age can affect likely tenure and lender eligibility.",
+    required: true,
+    suffix: "years",
+    placeholder: "For example, 29",
+  },
+
+  {
+    id: "creditScoreStatus",
+    type: "single_select",
+    title: "Do you know your credit score?",
+    description:
+      "If you do not know it, we will treat it as unknown—not as a poor score.",
+    required: true,
+    options: [
+      {
+        label: "Yes, I know it",
+        value: "known",
+      },
+      {
+        label: "No, I don't know",
+        value: "unknown",
+      },
+    ],
+  },
+
+  {
+    id: "creditScore",
+    type: "number",
+    title: "What is your credit score?",
+    description:
+      "Enter your latest known credit score.",
+    required: true,
+    placeholder: "For example, 780",
+    dependsOn: {
+      questionId: "creditScoreStatus",
+      value: "known",
+    },
+  },
+
+  {
+    id: "recentMissedPayment",
+    type: "yes_no",
+    title: "Have you missed or bounced an EMI recently?",
+    description:
+      "A recent missed payment can significantly affect borrowing safety.",
+    required: true,
+    options: [
+      {
+        label: "No",
+        value: "false",
+      },
+      {
+        label: "Yes",
+        value: "true",
+      },
+    ],
+  },
+];
+
+==================================================
+FILE: src/App.tsx
+==================================================
+import Home from "./pages/Home";
+import Questions from "./pages/Questions";
+import AnalyzingScreen from "./pages/AnalyzingScreen";
+import Results from "./pages/Results";
+
+import type { BorrowerProfile } from "./types/borrower";
+
+import { analyzeBorrower } from "./engine/borrowerAnalyzer";
+
+import { useLocalStorage } from "./hooks/useLocalStorage";
+
+type AppScreen =
+  | "home"
+  | "questions"
+  | "analyzing"
+  | "results";
+
+function App() {
+  const [screen, setScreen] =
+    useLocalStorage<AppScreen>("appScreen", "home");
+
+  const [borrowerProfile, setBorrowerProfile] =
+    useLocalStorage<BorrowerProfile | null>(
+      "borrowerProfile",
+      null,
+    );
+
+  function handleAssessmentComplete(
+    profile: BorrowerProfile,
+  ) {
+    setBorrowerProfile(profile);
+
+    // Show analysis experience before results.
+    setScreen("analyzing");
+  }
+
+  function handleAnalysisComplete() {
+    setScreen("results");
+  }
+
+  function handleStartAgain() {
+    setBorrowerProfile(null);
+
+    setScreen("home");
+  }
+
+  /* ---------------------------------
+     Home
+  ---------------------------------- */
+
+  if (screen === "home") {
+    return (
+      <Home
+        onStart={() => {
+          setScreen("questions");
+        }}
+      />
+    );
+  }
+
+  /* ---------------------------------
+     Questions
+  ---------------------------------- */
+
+  if (screen === "questions") {
+    return (
+      <Questions
+        onComplete={handleAssessmentComplete}
+        onExit={() => setScreen("home")}
+      />
+    );
+  }
+
+  /* ---------------------------------
+     Analyzing
+  ---------------------------------- */
+
+  if (screen === "analyzing") {
+    return (
+      <AnalyzingScreen
+        onComplete={handleAnalysisComplete}
+      />
+    );
+  }
+
+  /* ---------------------------------
+     Results
+  ---------------------------------- */
+
+  if (screen === "results" && borrowerProfile) {
+    const analysis =
+      analyzeBorrower(borrowerProfile);
+
+    return (
+      <Results
+        analysis={analysis}
+        onStartAgain={handleStartAgain}
+      />
+    );
+  }
+
+  /* ---------------------------------
+     Fallback
+  ---------------------------------- */
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#FAF9F8] px-6">
+      <div className="max-w-md rounded-2xl border border-[#E6DFE2] bg-white p-8 text-center shadow-sm">
+        <p className="text-sm font-medium text-[#756A70]">
+          We could not restore your assessment.
+        </p>
+
+        <p className="mt-2 text-sm leading-6 text-[#84777E]">
+          Please start a new borrowing assessment.
+        </p>
+
+        <button
+          type="button"
+          onClick={handleStartAgain}
+          className="mt-6 rounded-xl bg-[#4B2440] px-5 py-3 text-sm font-semibold text-white"
+        >
+          Start again
+        </button>
+      </div>
+    </main>
+  );
+}
+
+export default App;
+
+==================================================
+FILE: src/main.tsx
+==================================================
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
+==================================================
+FILE: src/data/defaults.ts
+==================================================
+
+
+==================================================
+FILE: src/data/loanProducts.ts
+==================================================
+import type { LoanPurpose } from "../types/borrower";
+
+export interface LoanProductConfig {
+  purpose: LoanPurpose;
+
+  label: string;
+
+  annualInterestRate: number;
+
+  tenureMonths: number;
+
+  processingFeePercentage: number;
+
+  description: string;
+}
+
+export const loanProducts: Record<
+  LoanPurpose,
+  LoanProductConfig
+> = {
+  personal: {
+    purpose: "personal",
+    label: "Personal Expense",
+    annualInterestRate: 14,
+    tenureMonths: 36,
+    processingFeePercentage: 2,
+    description:
+      "Short to medium-term borrowing for personal expenses.",
+  },
+
+  business: {
+    purpose: "business",
+    label: "Business",
+    annualInterestRate: 13,
+    tenureMonths: 48,
+    processingFeePercentage: 2,
+    description:
+      "Borrowing intended for working capital, inventory, expansion, or equipment.",
+  },
+
+  vehicle: {
+    purpose: "vehicle",
+    label: "Vehicle",
+    annualInterestRate: 10,
+    tenureMonths: 48,
+    processingFeePercentage: 1.5,
+    description:
+      "Borrowing for a two-wheeler, car, commercial vehicle, or EV.",
+  },
+
+  home: {
+    purpose: "home",
+    label: "Home",
+    annualInterestRate: 8.5,
+    tenureMonths: 240,
+    processingFeePercentage: 1,
+    description:
+      "Long-term borrowing for buying, building, or improving a home.",
+  },
+
+  education: {
+    purpose: "education",
+    label: "Education",
+    annualInterestRate: 9.5,
+    tenureMonths: 84,
+    processingFeePercentage: 1,
+    description:
+      "Borrowing for higher education or professional learning.",
+  },
+
+  other: {
+    purpose: "other",
+    label: "Other",
+    annualInterestRate: 14,
+    tenureMonths: 36,
+    processingFeePercentage: 2,
+    description:
+      "General-purpose borrowing assessed using conservative assumptions.",
+  },
+};
+
+export function getLoanProduct(
+  purpose?: LoanPurpose,
+): LoanProductConfig {
+  return loanProducts[purpose ?? "other"];
+}
+
+==================================================
+FILE: src/data/borrowerProfiles.ts
+==================================================
+
+
+==================================================
+FILE: src/pages/Questions.tsx
+==================================================
+import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
+import { useMemo, useState } from "react";
+import ProgressBar from "../components/ProgressBar";
+import QuestionCard from "../components/QuestionCard";
+
+import {
+  getVisibleQuestions,
+  isQuestionValid,
+  updateBorrowerAnswer,
+} from "../engine/questionFlow";
+
+import type { BorrowerProfile } from "../types/borrower";
+
+interface QuestionsProps {
+  onComplete: (profile: BorrowerProfile) => void;
+  onExit: () => void;
+}
+
+export default function Questions({
+  onComplete,
+  onExit,
+}: QuestionsProps) {
+  const [profile, setProfile] = useState<BorrowerProfile>({});
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const visibleQuestions = useMemo(
+    () => getVisibleQuestions(profile),
+    [profile],
+  );
+
+  const currentQuestion = visibleQuestions[currentIndex];
+
+  const currentValue = currentQuestion
+    ? profile[currentQuestion.id as keyof BorrowerProfile]
+    : undefined;
+
+  const isCurrentQuestionValid = currentQuestion
+    ? isQuestionValid(currentQuestion, profile)
+    : false;
+
+  function handleAnswer(value: string | number) {
+    if (!currentQuestion) return;
+
+    let formattedValue: string | number | boolean = value;
+
+    /*
+     * Convert yes/no string values into booleans.
+     */
+    if (currentQuestion.type === "yes_no") {
+      formattedValue = value === "true";
+    }
+
+    setProfile((previousProfile) =>
+      updateBorrowerAnswer(
+        previousProfile,
+        currentQuestion.id,
+        formattedValue,
+      ),
+    );
+  }
+
+  function handleNext() {
+    if (!currentQuestion || !isCurrentQuestionValid) {
+      return;
+    }
+
+    const isLastQuestion =
+      currentIndex === visibleQuestions.length - 1;
+
+    if (isLastQuestion) {
+      onComplete(profile);
+      return;
+    }
+
+    setCurrentIndex((previousIndex) => previousIndex + 1);
+  }
+
+  function handleBack() {
+    if (currentIndex === 0) {
+      onExit();
+      return;
+    }
+
+    setCurrentIndex((previousIndex) => previousIndex - 1);
+  }
+
+  if (!currentQuestion) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#FAF9F8] px-6">
+        <p className="text-sm text-[#756A70]">
+          Preparing your assessment...
+        </p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
+      <div className="mx-auto flex min-h-screen max-w-4xl flex-col px-6 py-6 sm:px-10">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
+          <button
+            type="button"
+            onClick={onExit}
+            className="flex items-center gap-3 text-left"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white">
+              BC
+            </div>
+
+            <div>
+              <p className="text-base font-semibold">
+                Borrower Copilot
+              </p>
+
+              <p className="text-xs text-[#756A70]">
+                Private self-assessment
+              </p>
+            </div>
+          </button>
+
+          <div className="hidden items-center gap-2 text-sm text-[#756A70] sm:flex">
+            <ShieldCheck size={17} />
+            <span>No personal data stored</span>
+          </div>
+        </header>
+
+        {/* Progress */}
+        <div className="py-8">
+          <ProgressBar
+            current={currentIndex + 1}
+            total={visibleQuestions.length}
+          />
+        </div>
+
+        {/* Question Area */}
+        <div className="flex flex-1 items-center py-6">
+          <div className="w-full">
+            <QuestionCard
+              question={currentQuestion}
+              value={currentValue}
+              onChange={handleAnswer}
+            />
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between border-t border-[#E6E0E2] pt-6">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE]"
+          >
+            <ArrowLeft size={18} />
+
+            {currentIndex === 0 ? "Exit" : "Back"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={!isCurrentQuestionValid}
+            className={`inline-flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition ${
+              isCurrentQuestionValid
+                ? "bg-[#4B2440] text-white shadow-sm hover:bg-[#3B1C32]"
+                : "cursor-not-allowed bg-[#E6DFE2] text-[#A69BA0]"
+            }`}
+          >
+            {currentIndex === visibleQuestions.length - 1
+              ? "See my assessment"
+              : "Continue"}
+
+            <ArrowRight size={18} />
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+==================================================
+FILE: src/pages/Results.tsx
+==================================================
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ShieldAlert,
+  TrendingDown,
+} from "lucide-react";
+
+import type { BorrowerAnalysisResult } from "../engine/borrowerAnalyzer";
+
+import {
+  generateRecommendations,
+  type BorrowerRecommendation,
+} from "../engine/recommendationEngine";
+
+import PlanComparison from "../components/PlanComparison";
+
+import AssessmentSummary from "../components/AssessmentSummary";
+
+interface ResultsProps {
+  analysis: BorrowerAnalysisResult;
+  onStartAgain: () => void;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function getRecommendationConfig(
+  recommendation:
+    | "BORROW"
+    | "BORROW_LESS"
+    | "DO_NOT_BORROW",
+) {
+  switch (recommendation) {
+    case "BORROW":
+      return {
+        title: "You can consider borrowing",
+        label: "BORROW",
+        description:
+          "Based on the information provided, the requested borrowing amount appears to be within the calculated affordability limits.",
+        icon: CheckCircle2,
+        color: "text-emerald-700",
+        background: "bg-emerald-50",
+        border: "border-emerald-200",
+      };
+
+    case "BORROW_LESS":
+      return {
+        title: "Consider borrowing less",
+        label: "BORROW LESS",
+        description:
+          "Your requested amount may place additional pressure on your monthly finances. A lower amount appears more manageable.",
+        icon: TrendingDown,
+        color: "text-amber-700",
+        background: "bg-amber-50",
+        border: "border-amber-200",
+      };
+
+    case "DO_NOT_BORROW":
+      return {
+        title: "Borrowing may not be safe right now",
+        label: "DO NOT BORROW",
+        description:
+          "Based on the affordability and risk checks, taking on this additional debt could place significant pressure on your finances.",
+        icon: ShieldAlert,
+        color: "text-red-700",
+        background: "bg-red-50",
+        border: "border-red-200",
+      };
+  }
+}
+
+export default function Results({
+  analysis,
+  onStartAgain,
+}: ResultsProps) {
+  const recommendationConfig = getRecommendationConfig(
+    analysis.decision.recommendation,
+  );
+
+  const RecommendationIcon =
+    recommendationConfig.icon;
+
+  const recommendationResult =
+    generateRecommendations(analysis);
+
+  return (
+    <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
+      <div className="mx-auto max-w-6xl px-6 py-8 sm:px-10">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white">
+              BC
+            </div>
+
+            <div>
+              <h1 className="font-semibold">
+                Borrower Copilot
+              </h1>
+
+              <p className="text-xs text-[#756A70]">
+                Your borrowing assessment
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onStartAgain}
+            className="hidden items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE] sm:inline-flex"
+          >
+            <ArrowLeft size={17} />
+            Start again
+          </button>
+        </header>
+
+        {/* Recommendation Hero */}
+        <section
+          className={`mt-10 rounded-3xl border p-8 sm:p-10 ${recommendationConfig.background} ${recommendationConfig.border}`}
+        >
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div
+                className={`mb-5 inline-flex items-center gap-2 rounded-full border border-current px-3 py-1 text-xs font-bold tracking-[0.12em] ${recommendationConfig.color}`}
+              >
+                <RecommendationIcon size={15} />
+
+                {recommendationConfig.label}
+              </div>
+
+              <h2 className="max-w-2xl text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
+                {recommendationConfig.title}
+              </h2>
+
+              <p className="mt-4 max-w-2xl leading-7 text-[#756A70]">
+                {recommendationConfig.description}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white/70 px-5 py-4 text-left sm:text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#756A70]">
+                Confidence
+              </p>
+
+              <p className="mt-1 text-3xl font-semibold">
+                {analysis.decision.confidenceScore}%
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Main Metrics */}
+        <section className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <MetricCard
+            label="Requested amount"
+            value={formatCurrency(
+            analysis.requestedLoan.amount,
+            )}
+            description="Amount you want to borrow"
+        />
+
+        <MetricCard
+            label="Your safe amount"
+            value={formatCurrency(
+            analysis.affordableLoanAmount,
+            )}
+            description="Conservative amount based on affordability"
+            highlight
+        />
+
+        <MetricCard
+            label="Likely lender sanction"
+            value={formatCurrency(
+            analysis.eligibility.likelySanctionAmount,
+            )}
+            description="Estimated lender-side eligibility"
+        />
+
+        <MetricCard
+            label="Safe monthly EMI"
+            value={formatCurrency(
+            analysis.affordability.safeMonthlyEmi,
+            )}
+            description="Maximum recommended new EMI"
+        />
+
+        <MetricCard
+            label="Fair interest rate"
+            value={`${analysis.interestRate.fairRateMin}% – ${analysis.interestRate.fairRateMax}%`}
+            description="Estimated rate range based on your profile"
+        />
+
+        <MetricCard
+            label="Estimated APR"
+            value={`${analysis.apr.estimatedApr}%`}
+            description="Includes estimated borrowing costs"
+        />
+        </section>
+
+        {/* Main Content */}
+        <section className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* Left Column */}
+          <div className="space-y-8">
+            {/* Why this recommendation */}
+            <ResultCard title="Why this recommendation">
+              <div className="space-y-4">
+                {analysis.decision.reasons.map(
+                  (reason) => (
+                    <div
+                      key={reason}
+                      className="flex gap-3"
+                    >
+                      <CheckCircle2
+                        size={19}
+                        className="mt-0.5 shrink-0 text-emerald-600"
+                      />
+
+                      <p className="text-sm leading-6 text-[#756A70]">
+                        {reason}
+                      </p>
+                    </div>
+                  ),
+                )}
+
+                {analysis.decision.warnings.map(
+                  (warning) => (
+                    <div
+                      key={warning}
+                      className="flex gap-3"
+                    >
+                      <AlertTriangle
+                        size={19}
+                        className="mt-0.5 shrink-0 text-amber-600"
+                      />
+
+                      <p className="text-sm leading-6 text-[#756A70]">
+                        {warning}
+                      </p>
+                    </div>
+                  ),
+                )}
+              </div>
+            </ResultCard>
+
+            {/* Personalized Recommendations */}
+            <ResultCard title="What you can do next">
+              <p className="mb-6 text-sm leading-6 text-[#756A70]">
+                These recommendations are based on your
+                income, affordability limits, borrowing
+                costs, and stress test results.
+              </p>
+
+              <div className="space-y-4">
+                {recommendationResult.recommendations.map(
+                  (recommendation) => (
+                    <ActionRecommendation
+                      key={recommendation.id}
+                      recommendation={recommendation}
+                    />
+                  ),
+                )}
+              </div>
+            </ResultCard>
+
+            {/* Plan Comparison */}
+            <PlanComparison analysis={analysis} />
+
+            {/* Income Stress Test */}
+            <ResultCard title="Income stress test">
+              <p className="mb-6 text-sm leading-6 text-[#756A70]">
+                This shows how the proposed EMI performs
+                if your income decreases.
+              </p>
+
+              <div className="space-y-3">
+                {analysis.stressTest.scenarios.map(
+                  (scenario) => (
+                    <div
+                      key={scenario.incomeDropPercentage}
+                      className="flex items-center justify-between rounded-xl border border-[#EAE4E6] p-4"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          Income drops{" "}
+                          {scenario.incomeDropPercentage}%
+                        </p>
+
+                        <p className="mt-1 text-xs text-[#756A70]">
+                          Stressed income:{" "}
+                          {formatCurrency(
+                            scenario.stressedIncome,
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p
+                          className={`text-sm font-semibold ${
+                            scenario.isAffordable
+                              ? "text-emerald-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {scenario.isAffordable
+                            ? "Affordable"
+                            : "Not safe"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-[#756A70]">
+                          EMI ratio:{" "}
+                          {scenario.emiToIncomeRatio}%
+                        </p>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            </ResultCard>
+          </div>
+
+          {/* Right Column */}
+          <div className="space-y-8">
+            {/* Borrowing Cost */}
+            <ResultCard title="Borrowing cost">
+              <div className="space-y-5">
+                <CostRow
+                  label="Monthly EMI"
+                  value={formatCurrency(
+                    analysis.requestedLoan.monthlyEmi,
+                  )}
+                />
+
+                <CostRow
+                  label="Estimated APR"
+                  value={`${analysis.apr.estimatedApr}%`}
+                />
+
+                <CostRow
+                  label="Processing fee"
+                  value={formatCurrency(
+                    analysis.apr.processingFee,
+                  )}
+                />
+
+                <CostRow
+                  label="Total interest"
+                  value={formatCurrency(
+                    analysis.apr.totalInterest,
+                  )}
+                />
+
+                <CostRow
+                  label="Net amount received"
+                  value={formatCurrency(
+                    analysis.apr.netDisbursedAmount,
+                  )}
+                  strong
+                />
+              </div>
+            </ResultCard>
+
+            {/* Financial Snapshot */}
+            <ResultCard title="Financial snapshot">
+              <div className="space-y-5">
+                <CostRow
+                  label="Usable monthly income"
+                  value={formatCurrency(
+                    analysis.income.usableMonthlyIncome,
+                  )}
+                />
+
+                <CostRow
+                  label="Monthly expenses"
+                  value={formatCurrency(
+                    analysis.affordability.monthlyExpenses,
+                  )}
+                />
+
+                <CostRow
+                  label="Existing EMI"
+                  value={formatCurrency(
+                    analysis.affordability.existingEmi,
+                  )}
+                />
+
+                <CostRow
+                  label="Disposable income"
+                  value={formatCurrency(
+                    analysis.affordability.disposableIncome,
+                  )}
+                  strong
+                />
+              </div>
+            </ResultCard>
+
+            {/* Assessment Summary */}
+            <AssessmentSummary analysis={analysis} />
+
+            {/* What You Can Do Next */}
+            <ResultCard title="What you can do next">
+            <div className="space-y-5">
+                <div>
+                <h4 className="text-base font-semibold text-[#211A1E]">
+                    {analysis.negotiation.headline}
+                </h4>
+
+                <p className="mt-2 text-sm leading-6 text-[#756A70]">
+                    {analysis.negotiation.summary}
+                </p>
+                </div>
+
+                <div className="space-y-4">
+                {analysis.negotiation.suggestions.map(
+                    (suggestion) => (
+                    <div
+                        key={suggestion.title}
+                        className="rounded-xl border border-[#EAE4E6] bg-[#FAF9F8] p-4"
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h5 className="text-sm font-semibold text-[#211A1E]">
+                            {suggestion.title}
+                            </h5>
+
+                            <p className="mt-1.5 text-sm leading-6 text-[#756A70]">
+                            {suggestion.description}
+                            </p>
+                        </div>
+
+                        <span
+                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide ${
+                            suggestion.priority === "HIGH"
+                                ? "bg-red-50 text-red-700"
+                                : suggestion.priority === "MEDIUM"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-[#F1ECEE] text-[#643652]"
+                            }`}
+                        >
+                            {suggestion.priority}
+                        </span>
+                        </div>
+                    </div>
+                    ),
+                )}
+                </div>
+            </div>
+            </ResultCard>
+          </div>
+        </section>
+
+        {/* Mobile Start Again */}
+        <button
+          type="button"
+          onClick={onStartAgain}
+          className="mt-10 w-full rounded-xl bg-[#4B2440] px-5 py-4 text-sm font-semibold text-white sm:hidden"
+        >
+          Start new assessment
+        </button>
+      </div>
+    </main>
+  );
+}
+
+/* ---------------------------------
+   Reusable Components
+---------------------------------- */
+
+interface MetricCardProps {
+  label: string;
+  value: string;
+  description: string;
+  highlight?: boolean;
+}
+
+function MetricCard({
+  label,
+  value,
+  description,
+  highlight = false,
+}: MetricCardProps) {
+  return (
+    <div
+      className={`rounded-2xl border p-6 ${
+        highlight
+          ? "border-[#4B2440] bg-[#F8F3F6]"
+          : "border-[#E6DFE2] bg-white"
+      }`}
+    >
+      <p className="text-sm font-medium text-[#756A70]">
+        {label}
+      </p>
+
+      <p className="mt-3 text-3xl font-semibold tracking-tight">
+        {value}
+      </p>
+
+      <p className="mt-2 text-xs text-[#84777E]">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+interface ResultCardProps {
+  title: string;
+  children: React.ReactNode;
+}
+
+function ResultCard({
+  title,
+  children,
+}: ResultCardProps) {
+  return (
+    <section className="rounded-2xl border border-[#E6DFE2] bg-white p-6 sm:p-7">
+      <h3 className="text-lg font-semibold">
+        {title}
+      </h3>
+
+      <div className="mt-6">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+interface CostRowProps {
+  label: string;
+  value: string;
+  strong?: boolean;
+}
+
+function CostRow({
+  label,
+  value,
+  strong = false,
+}: CostRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm text-[#756A70]">
+        {label}
+      </span>
+
+      <span
+        className={`text-sm ${
+          strong
+            ? "font-semibold text-[#211A1E]"
+            : "font-medium text-[#40383C]"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+interface ActionRecommendationProps {
+  recommendation: BorrowerRecommendation;
+}
+
+function ActionRecommendation({
+  recommendation,
+}: ActionRecommendationProps) {
+  const priorityConfig = {
+    high: {
+      label: "HIGH PRIORITY",
+      badge:
+        "bg-red-50 text-red-700 border-red-200",
+      dot: "bg-red-500",
+    },
+
+    medium: {
+      label: "MEDIUM PRIORITY",
+      badge:
+        "bg-amber-50 text-amber-700 border-amber-200",
+      dot: "bg-amber-500",
+    },
+
+    low: {
+      label: "TIP",
+      badge:
+        "bg-[#F3EEF1] text-[#643652] border-[#DED3D9]",
+      dot: "bg-[#643652]",
+    },
+  };
+
+  const config =
+    priorityConfig[recommendation.priority];
+
+  return (
+    <div className="rounded-xl border border-[#EAE4E6] p-5">
+      <div className="flex items-start gap-3">
+        <span
+          className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${config.dot}`}
+        />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h4 className="font-semibold text-[#211A1E]">
+              {recommendation.title}
+            </h4>
+
+            <span
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.1em] ${config.badge}`}
+            >
+              {config.label}
+            </span>
+          </div>
+
+          <p className="mt-3 text-sm leading-6 text-[#756A70]">
+            {recommendation.description}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+==================================================
+FILE: src/pages/AnalyzingScreen.tsx
+==================================================
+import {
+  BrainCircuit,
+  CheckCircle2,
+  LoaderCircle,
+  ShieldCheck,
+  TrendingUp,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+
+interface AnalyzingScreenProps {
+  onComplete: () => void;
+}
+
+const analysisSteps = [
+  {
+    label: "Processing your financial information",
+    icon: BrainCircuit,
+  },
+  {
+    label: "Calculating borrowing affordability",
+    icon: TrendingUp,
+  },
+  {
+    label: "Running income stress tests",
+    icon: ShieldCheck,
+  },
+  {
+    label: "Generating personalized recommendations",
+    icon: CheckCircle2,
+  },
+];
+
+export default function AnalyzingScreen({
+  onComplete,
+}: AnalyzingScreenProps) {
+  const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    if (currentStep >= analysisSteps.length) {
+      const completeTimer = window.setTimeout(
+        onComplete,
+        500,
+      );
+
+      return () => window.clearTimeout(completeTimer);
+    }
+
+    const timer = window.setTimeout(() => {
+      setCurrentStep((previousStep) => previousStep + 1);
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [currentStep, onComplete]);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#FAF9F8] px-6 py-10 text-[#211A1E]">
+      <section className="w-full max-w-xl">
+        {/* Brand */}
+        <div className="mb-10 flex items-center justify-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#4B2440] font-bold text-white">
+            BC
+          </div>
+
+          <div>
+            <h1 className="font-semibold">
+              Borrower Copilot
+            </h1>
+
+            <p className="text-xs text-[#756A70]">
+              Preparing your assessment
+            </p>
+          </div>
+        </div>
+
+        {/* Main Card */}
+        <div className="rounded-3xl border border-[#E6DFE2] bg-white p-7 shadow-sm sm:p-10">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3EEF1] text-[#643652]">
+              <LoaderCircle
+                size={24}
+                className="animate-spin"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-[#643652]">
+                ANALYZING
+              </p>
+
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+                Building your borrowing assessment
+              </h2>
+            </div>
+          </div>
+
+          <p className="mt-6 text-sm leading-7 text-[#756A70]">
+            We are evaluating affordability, borrowing
+            costs, and potential financial pressure based
+            on the information you provided.
+          </p>
+
+          {/* Progress */}
+          <div className="mt-8">
+            <div className="mb-3 flex items-center justify-between text-xs text-[#756A70]">
+              <span>Analysis progress</span>
+
+              <span>
+                {Math.min(
+                  Math.round(
+                    (currentStep /
+                      analysisSteps.length) *
+                      100,
+                  ),
+                  100,
+                )}
+                %
+              </span>
+            </div>
+
+            <div className="h-2 overflow-hidden rounded-full bg-[#EEE8EB]">
+              <div
+                className="h-full rounded-full bg-[#4B2440] transition-all duration-500"
+                style={{
+                  width: `${Math.min(
+                    (currentStep /
+                      analysisSteps.length) *
+                      100,
+                    100,
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Steps */}
+          <div className="mt-8 space-y-4">
+            {analysisSteps.map((step, index) => {
+              const StepIcon = step.icon;
+
+              const isCompleted =
+                index < currentStep;
+
+              const isCurrent =
+                index === currentStep;
+
+              return (
+                <div
+                  key={step.label}
+                  className={`flex items-center gap-4 rounded-xl border p-4 transition ${
+                    isCurrent
+                      ? "border-[#D8C8D0] bg-[#FAF6F8]"
+                      : "border-[#EAE4E6] bg-white"
+                  }`}
+                >
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                      isCompleted
+                        ? "bg-emerald-50 text-emerald-600"
+                        : isCurrent
+                          ? "bg-[#4B2440] text-white"
+                          : "bg-[#F3EEF1] text-[#9A8C92]"
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <CheckCircle2 size={18} />
+                    ) : (
+                      <StepIcon
+                        size={18}
+                        className={
+                          isCurrent
+                            ? "animate-pulse"
+                            : ""
+                        }
+                      />
+                    )}
+                  </div>
+
+                  <p
+                    className={`text-sm ${
+                      isCompleted
+                        ? "font-medium text-[#40383C]"
+                        : isCurrent
+                          ? "font-semibold text-[#211A1E]"
+                          : "text-[#9A8C92]"
+                    }`}
+                  >
+                    {step.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mt-8 text-center text-xs leading-5 text-[#84777E]">
+            This assessment is generated from the financial
+            information provided during this session.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+==================================================
+FILE: src/pages/Home.tsx
+==================================================
+import { ArrowRight, ShieldCheck, Scale, WalletCards } from "lucide-react";
+
+interface HomeProps {
+  onStart: () => void;
+}
+
+export default function Home({ onStart }: HomeProps) {
+  return (
+    <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
+      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6 md:px-10 lg:px-16">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white shadow-sm">
+              BC
+            </div>
+
+            <div>
+              <h1 className="text-base font-semibold tracking-tight">
+                Borrower Copilot
+              </h1>
+              <p className="text-xs text-[#756A70]">
+                Know your position before you borrow.
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-2 text-sm text-[#756A70] sm:flex">
+            <ShieldCheck size={17} />
+            <span>Private self-assessment</span>
+          </div>
+        </header>
+
+        {/* Hero */}
+        <section className="flex flex-1 items-center py-16 lg:py-24">
+          <div className="grid w-full items-center gap-14 lg:grid-cols-[1.1fr_0.9fr]">
+            {/* Left */}
+            <div className="max-w-3xl">
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#E4D9DF] bg-[#F4EDF1] px-4 py-2 text-sm font-medium text-[#643652]">
+                <span className="h-2 w-2 rounded-full bg-[#643652]" />
+                Indian borrower self-assessment
+              </div>
+
+              <h2 className="max-w-3xl text-5xl font-semibold leading-[1.05] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
+                Borrow with{" "}
+                <span className="text-[#643652]">clarity</span>, not pressure.
+              </h2>
+
+              <p className="mt-7 max-w-2xl text-lg leading-8 text-[#6F646A] sm:text-xl">
+                Understand whether you should borrow, how much you can safely
+                carry, what a fair interest rate looks like, and the EMI you
+                should not cross.
+              </p>
+
+              <div className="mt-9 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <button
+                  onClick={onStart}
+                  className="group inline-flex items-center justify-center gap-3 rounded-xl bg-[#4B2440] px-6 py-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3B1C32]"
+                >
+                  Start your assessment
+
+                  <ArrowRight
+                    size={18}
+                    className="transition-transform duration-200 group-hover:translate-x-1"
+                  />
+                </button>
+
+                <p className="text-sm text-[#81757B]">
+                  Takes approximately 5 minutes
+                </p>
+              </div>
+
+              {/* Trust points */}
+              <div className="mt-12 grid gap-4 sm:grid-cols-3">
+                <Feature
+                  icon={<Scale size={19} />}
+                  title="Independent view"
+                  description="Not designed to sell you a loan."
+                />
+
+                <Feature
+                  icon={<WalletCards size={19} />}
+                  title="Your safe limit"
+                  description="Separate from what a lender may offer."
+                />
+
+                <Feature
+                  icon={<ShieldCheck size={19} />}
+                  title="No account needed"
+                  description="Your assessment stays on this device."
+                />
+              </div>
+            </div>
+
+            {/* Right Card */}
+            <div className="relative">
+              <div className="rounded-[2rem] border border-[#E6DFE2] bg-white p-6 shadow-[0_24px_70px_rgba(56,35,48,0.08)] sm:p-8">
+                <div className="flex items-center justify-between border-b border-[#EEE9EB] pb-6">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A7C83]">
+                      Your outcome
+                    </p>
+
+                    <h3 className="mt-2 text-2xl font-semibold tracking-tight">
+                      Before you speak to a lender
+                    </h3>
+                  </div>
+
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F2E8EE] font-semibold text-[#643652]">
+                    4
+                  </div>
+                </div>
+
+                <div className="space-y-5 pt-6">
+                  <Outcome
+                    number="01"
+                    title="Borrow decision"
+                    description="Borrow, borrow less, or wait."
+                  />
+
+                  <Outcome
+                    number="02"
+                    title="Safe borrowing limit"
+                    description="Your safe amount vs likely sanction."
+                  />
+
+                  <Outcome
+                    number="03"
+                    title="Fair rate range"
+                    description="Including the all-in borrowing cost."
+                  />
+
+                  <Outcome
+                    number="04"
+                    title="EMI ceiling"
+                    description="With a stress-tested scenario."
+                  />
+                </div>
+
+                <div className="mt-7 rounded-2xl bg-[#4B2440] p-5 text-white">
+                  <p className="text-xs font-medium uppercase tracking-[0.15em] text-[#D8BECF]">
+                    Final output
+                  </p>
+
+                  <p className="mt-2 text-lg font-medium">
+                    A Negotiation Card you can take to a lender.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="border-t border-[#E6E0E2] pt-5 text-sm text-[#84777E]">
+          Borrower Copilot · A transparent financial self-assessment
+        </footer>
+      </div>
+    </main>
+  );
+}
+
+interface FeatureProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+function Feature({ icon, title, description }: FeatureProps) {
+  return (
+    <div className="rounded-2xl border border-[#E8E2E5] bg-white p-5">
+      <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-[#F2E8EE] text-[#643652]">
+        {icon}
+      </div>
+
+      <h3 className="font-semibold">{title}</h3>
+
+      <p className="mt-1 text-sm leading-6 text-[#756A70]">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+interface OutcomeProps {
+  number: string;
+  title: string;
+  description: string;
+}
+
+function Outcome({ number, title, description }: OutcomeProps) {
+  return (
+    <div className="flex gap-4">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#E6DDE2] bg-[#FAF7F8] text-xs font-bold text-[#643652]">
+        {number}
+      </span>
+
+      <div>
+        <h4 className="font-semibold">{title}</h4>
+        <p className="mt-1 text-sm leading-6 text-[#756A70]">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}

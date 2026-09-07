@@ -160,6 +160,59 @@ export function generateRecommendations(
 
   /*
    * ==================================
+   * 7. GOLD LOAN — ADDED
+   * ==================================
+   */
+
+  if (
+    analysis.profile.loanPurpose === "gold" &&
+    analysis.goldLoan
+  ) {
+    const requestedAmount =
+      requestedLoan.amount;
+
+    const goldValueLimit =
+      analysis.goldLoan.maxLoanByGoldValue;
+
+    if (requestedAmount > goldValueLimit) {
+      const excessAmount =
+        requestedAmount -
+        goldValueLimit;
+
+      recommendations.push({
+        id: "gold-value-limit",
+        priority: "high",
+        title: "Reduce the amount relative to your gold value",
+        description:
+          `Your requested amount is ₹${Math.round(
+            excessAmount,
+          ).toLocaleString(
+            "en-IN",
+          )} above the conservative value-based limit used in this assessment. Consider borrowing less rather than depending on a higher lender valuation.`,
+      });
+    } else {
+      recommendations.push({
+        id: "gold-valuation-check",
+        priority: "medium",
+        title: "Confirm the lender's gold valuation",
+        description:
+          "The estimated value used in this assessment may differ from the lender's final valuation. Ask how your gold will be assessed and how the sanctioned amount is determined.",
+      });
+    }
+
+    if (analysis.profile.hasExistingGoldLoan) {
+      recommendations.push({
+        id: "existing-gold-loan",
+        priority: "high",
+        title: "Review all existing gold-backed debt",
+        description:
+          "You indicated that you already have another loan against gold. Review the combined repayment pressure before taking additional borrowing.",
+      });
+    }
+  }
+
+  /*
+   * ==================================
    * DEFAULT POSITIVE RECOMMENDATION
    * ==================================
    */

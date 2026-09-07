@@ -1,14 +1,27 @@
 import {
-  Download,
-  Landmark,
-  ShieldCheck,
-  MessageSquareText,
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ShieldAlert,
+  TrendingDown,
 } from "lucide-react";
 
 import type { BorrowerAnalysisResult } from "../engine/borrowerAnalyzer";
 
-interface NegotiationCardProps {
+import {
+  generateRecommendations,
+  type BorrowerRecommendation,
+} from "../engine/recommendationEngine";
+
+import PlanComparison from "../components/PlanComparison";
+
+import AssessmentSummary from "../components/AssessmentSummary";
+
+import NegotiationCard from "../components/NegotiationCard";
+
+interface ResultsProps {
   analysis: BorrowerAnalysisResult;
+  onStartAgain: () => void;
 }
 
 function formatCurrency(value: number) {
@@ -19,243 +32,643 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-export default function NegotiationCard({
-  analysis,
-}: NegotiationCardProps) {
-  const {
-    decision,
-    affordability,
-    apr,
-    negotiation,
-  } = analysis;
+function getRecommendationConfig(
+  recommendation:
+    | "BORROW"
+    | "BORROW_LESS"
+    | "DO_NOT_BORROW",
+) {
+  switch (recommendation) {
+    case "BORROW":
+      return {
+        title: "You can consider borrowing",
+        label: "BORROW",
+        description:
+          "Based on the information provided, the requested borrowing amount appears to be within the calculated affordability limits.",
+        icon: CheckCircle2,
+        color: "text-emerald-700",
+        background: "bg-emerald-50",
+        border: "border-emerald-200",
+      };
 
-  const recommendationText =
-    decision.recommendation === "BORROW"
-      ? "The requested borrowing level appears to be within the calculated affordability range."
-      : decision.recommendation === "BORROW_LESS"
-        ? "A lower borrowing amount may better match the calculated affordability range."
-        : "The current borrowing request may create significant financial pressure.";
+    case "BORROW_LESS":
+      return {
+        title: "Consider borrowing less",
+        label: "BORROW LESS",
+        description:
+          "Your requested amount may place additional pressure on your monthly finances. A lower amount appears more manageable.",
+        icon: TrendingDown,
+        color: "text-amber-700",
+        background: "bg-amber-50",
+        border: "border-amber-200",
+      };
+
+    case "DO_NOT_BORROW":
+      return {
+        title: "Borrowing may not be safe right now",
+        label: "DO NOT BORROW",
+        description:
+          "Based on the affordability and risk checks, taking on this additional debt could place significant pressure on your finances.",
+        icon: ShieldAlert,
+        color: "text-red-700",
+        background: "bg-red-50",
+        border: "border-red-200",
+      };
+  }
+}
+
+export default function Results({
+  analysis,
+  onStartAgain,
+}: ResultsProps) {
+  const recommendationConfig = getRecommendationConfig(
+    analysis.decision.recommendation,
+  );
+
+  const RecommendationIcon =
+    recommendationConfig.icon;
+
+  const recommendationResult =
+    generateRecommendations(analysis);
+
+  const isGoldLoan =
+    analysis.profile.loanPurpose === "gold";
 
   return (
-    <section className="print-negotiation-card overflow-hidden rounded-3xl border border-[#4B2440] bg-[#4B2440] text-white shadow-sm">
-      {/* Header */}
-      <div className="border-b border-white/15 p-6 sm:p-8">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/60">
-              <Landmark size={15} />
-
-              Borrower Copilot
+    <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
+      <div className="mx-auto max-w-6xl px-6 py-8 sm:px-10">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white">
+              BC
             </div>
 
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight">
-              Negotiation Card
-            </h2>
+            <div>
+              <h1 className="font-semibold">
+                Borrower Copilot
+              </h1>
 
-            <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
-              A transparent affordability summary you can
-              use before discussing loan terms with a lender.
-            </p>
+              <p className="text-xs text-[#756A70]">
+                Your borrowing assessment
+              </p>
+            </div>
           </div>
 
-          <div className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold">
-            Self-assessment
+          <button
+            type="button"
+            onClick={onStartAgain}
+            className="hidden items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE] sm:inline-flex"
+          >
+            <ArrowLeft size={17} />
+            Start again
+          </button>
+        </header>
+
+        {/* Recommendation Hero */}
+        <section
+          className={`mt-10 rounded-3xl border p-8 sm:p-10 ${recommendationConfig.background} ${recommendationConfig.border}`}
+        >
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div
+                className={`mb-5 inline-flex items-center gap-2 rounded-full border border-current px-3 py-1 text-xs font-bold tracking-[0.12em] ${recommendationConfig.color}`}
+              >
+                <RecommendationIcon size={15} />
+
+                {recommendationConfig.label}
+              </div>
+
+              <h2 className="max-w-2xl text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
+                {recommendationConfig.title}
+              </h2>
+
+              <p className="mt-4 max-w-2xl leading-7 text-[#756A70]">
+                {recommendationConfig.description}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white/70 px-5 py-4 text-left sm:text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#756A70]">
+                Confidence
+              </p>
+
+              <p className="mt-1 text-3xl font-semibold">
+                {analysis.decision.confidenceScore}%
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      {/* Core Metrics */}
-      <div className="grid gap-6 p-6 sm:grid-cols-2 sm:p-8">
-        <CardMetric
-          label="Recommended borrowing limit"
-          value={formatCurrency(
-            decision.recommendedLoanAmount,
-          )}
-        />
-
-        <CardMetric
-          label="Safe monthly EMI"
-          value={formatCurrency(
-            affordability.safeMonthlyEmi,
-          )}
-        />
-
-        <CardMetric
-          label="Estimated APR"
-          value={`${apr.estimatedApr}%`}
-        />
-
-        <CardMetric
-          label="Requested loan amount"
-          value={formatCurrency(
-            analysis.requestedLoan.amount,
-          )}
-        />
-      </div>
-
-      {/* Assessment Recommendation */}
-      <div className="mx-6 rounded-2xl bg-white/10 p-5 sm:mx-8">
-        <div className="flex gap-3">
-          <ShieldCheck
-            size={20}
-            className="mt-0.5 shrink-0 text-white"
+        {/* Main Metrics */}
+        <section className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <MetricCard
+            label="Requested amount"
+            value={formatCurrency(
+              analysis.requestedLoan.amount,
+            )}
+            description="Amount you want to borrow"
           />
 
-          <div>
-            <p className="text-sm font-semibold">
-              Assessment recommendation
-            </p>
-
-            <p className="mt-2 text-sm leading-6 text-white/70">
-              {recommendationText}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Negotiation Strategy */}
-      <div className="p-6 sm:p-8">
-        <div className="flex items-center gap-2">
-          <MessageSquareText
-            size={18}
-            className="text-white/70"
+          <MetricCard
+            label="Your safe amount"
+            value={formatCurrency(
+              analysis.affordableLoanAmount,
+            )}
+            description="Conservative amount based on affordability"
+            highlight
           />
 
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">
-            Your negotiation strategy
-          </p>
-        </div>
+          <MetricCard
+            label="Likely lender sanction"
+            value={formatCurrency(
+              analysis.eligibility.likelySanctionAmount,
+            )}
+            description="Estimated lender-side eligibility"
+          />
 
-        <h3 className="mt-4 text-xl font-semibold">
-          {negotiation.headline}
-        </h3>
+          <MetricCard
+            label="Safe monthly EMI"
+            value={formatCurrency(
+              analysis.affordability.safeMonthlyEmi,
+            )}
+            description="Maximum recommended new EMI"
+          />
 
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
-          {negotiation.summary}
-        </p>
+          <MetricCard
+            label="Fair interest rate"
+            value={`${analysis.interestRate.fairRateMin}% – ${analysis.interestRate.fairRateMax}%`}
+            description="Estimated rate range based on your profile"
+          />
 
-        {negotiation.suggestions.length > 0 && (
-          <div className="mt-6 space-y-4">
-            {negotiation.suggestions.map(
-              (suggestion, index) => (
-                <div
-                  key={`${suggestion.title}-${index}`}
-                  className="rounded-2xl border border-white/15 bg-white/5 p-5"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h4 className="text-sm font-semibold">
-                        {suggestion.title}
-                      </h4>
+          <MetricCard
+            label="Estimated APR"
+            value={`${analysis.apr.estimatedApr}%`}
+            description="Includes estimated borrowing costs"
+          />
 
-                      <p className="mt-2 text-sm leading-6 text-white/70">
-                        {suggestion.description}
+          {/* GOLD LOAN METRIC — ADDED */}
+          {isGoldLoan && analysis.goldLoan && (
+            <MetricCard
+              label="Gold-backed limit"
+              value={formatCurrency(
+                analysis.goldLoan.maxLoanByGoldValue,
+              )}
+              description={`Based on ${analysis.goldLoan.conservativeLtvPercentage}% of your estimated gold value`}
+              highlight
+            />
+          )}
+        </section>
+
+        {/* Main Content */}
+        <section className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* Left Column */}
+          <div className="space-y-8">
+            {/* Why this recommendation */}
+            <ResultCard title="Why this recommendation">
+              <div className="space-y-4">
+                {analysis.decision.reasons.map(
+                  (reason) => (
+                    <div
+                      key={reason}
+                      className="flex gap-3"
+                    >
+                      <CheckCircle2
+                        size={19}
+                        className="mt-0.5 shrink-0 text-emerald-600"
+                      />
+
+                      <p className="text-sm leading-6 text-[#756A70]">
+                        {reason}
                       </p>
                     </div>
+                  ),
+                )}
 
-                    <PriorityBadge
-                      priority={suggestion.priority}
+                {analysis.decision.warnings.map(
+                  (warning) => (
+                    <div
+                      key={warning}
+                      className="flex gap-3"
+                    >
+                      <AlertTriangle
+                        size={19}
+                        className="mt-0.5 shrink-0 text-amber-600"
+                      />
+
+                      <p className="text-sm leading-6 text-[#756A70]">
+                        {warning}
+                      </p>
+                    </div>
+                  ),
+                )}
+              </div>
+            </ResultCard>
+
+            {/* Personalized Recommendations */}
+            <ResultCard title="What you can do next">
+              <p className="mb-6 text-sm leading-6 text-[#756A70]">
+                These recommendations are based on your
+                income, affordability limits, borrowing
+                costs, and stress test results.
+              </p>
+
+              <div className="space-y-4">
+                {recommendationResult.recommendations.map(
+                  (recommendation) => (
+                    <ActionRecommendation
+                      key={recommendation.id}
+                      recommendation={recommendation}
                     />
-                  </div>
-                </div>
-              ),
-            )}
+                  ),
+                )}
+              </div>
+            </ResultCard>
+
+            {/* Plan Comparison */}
+            <PlanComparison analysis={analysis} />
+
+            {/* Income Stress Test */}
+            <ResultCard title="Income stress test">
+              <p className="mb-6 text-sm leading-6 text-[#756A70]">
+                This shows how the proposed EMI performs
+                if your income decreases.
+              </p>
+
+              <div className="space-y-3">
+                {analysis.stressTest.scenarios.map(
+                  (scenario) => (
+                    <div
+                      key={scenario.incomeDropPercentage}
+                      className="flex items-center justify-between rounded-xl border border-[#EAE4E6] p-4"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          Income drops{" "}
+                          {scenario.incomeDropPercentage}%
+                        </p>
+
+                        <p className="mt-1 text-xs text-[#756A70]">
+                          Stressed income:{" "}
+                          {formatCurrency(
+                            scenario.stressedIncome,
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p
+                          className={`text-sm font-semibold ${
+                            scenario.isAffordable
+                              ? "text-emerald-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {scenario.isAffordable
+                            ? "Affordable"
+                            : "Not safe"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-[#756A70]">
+                          EMI ratio:{" "}
+                          {scenario.emiToIncomeRatio}%
+                        </p>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            </ResultCard>
           </div>
-        )}
-      </div>
 
-      {/* Talking Points */}
-      <div className="border-t border-white/15 p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">
-          Questions to discuss with your lender
-        </p>
+          {/* Right Column */}
+          <div className="space-y-8">
+            {/* Borrowing Cost */}
+            <ResultCard title="Borrowing cost">
+              <div className="space-y-5">
+                <CostRow
+                  label="Monthly EMI"
+                  value={formatCurrency(
+                    analysis.requestedLoan.monthlyEmi,
+                  )}
+                />
 
-        <ul className="mt-4 space-y-3 text-sm text-white/80">
-          <li>
-            • Can the interest rate be improved based on my
-            financial profile?
-          </li>
+                <CostRow
+                  label="Estimated APR"
+                  value={`${analysis.apr.estimatedApr}%`}
+                />
 
-          <li>
-            • What fees are included beyond the stated
-            interest rate?
-          </li>
+                <CostRow
+                  label="Processing fee"
+                  value={formatCurrency(
+                    analysis.apr.processingFee,
+                  )}
+                />
 
-          <li>
-            • What will be the total amount I repay over the
-            full loan tenure?
-          </li>
+                <CostRow
+                  label="Total interest"
+                  value={formatCurrency(
+                    analysis.apr.totalInterest,
+                  )}
+                />
 
-          <li>
-            • Can the EMI be adjusted to remain within my safe
-            monthly limit?
-          </li>
-        </ul>
-      </div>
+                <CostRow
+                  label="Net amount received"
+                  value={formatCurrency(
+                    analysis.apr.netDisbursedAmount,
+                  )}
+                  strong
+                />
+              </div>
+            </ResultCard>
 
-      {/* Footer */}
-      <div className="flex flex-col gap-4 border-t border-white/15 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
-        <p className="max-w-xl text-xs leading-5 text-white/50">
-          This is an educational affordability assessment,
-          not a loan approval or financial guarantee.
-        </p>
+            {/* Financial Snapshot */}
+            <ResultCard title="Financial snapshot">
+              <div className="space-y-5">
+                <CostRow
+                  label="Usable monthly income"
+                  value={formatCurrency(
+                    analysis.income.usableMonthlyIncome,
+                  )}
+                />
 
+                <CostRow
+                  label="Monthly expenses"
+                  value={formatCurrency(
+                    analysis.affordability.monthlyExpenses,
+                  )}
+                />
+
+                <CostRow
+                  label="Existing EMI"
+                  value={formatCurrency(
+                    analysis.affordability.existingEmi,
+                  )}
+                />
+
+                <CostRow
+                  label="Disposable income"
+                  value={formatCurrency(
+                    analysis.affordability.disposableIncome,
+                  )}
+                  strong
+                />
+              </div>
+            </ResultCard>
+
+            {/* Gold Loan Snapshot — ADDED */}
+            {isGoldLoan && analysis.goldLoan && (
+              <ResultCard title="Gold loan snapshot">
+                <div className="space-y-5">
+                  <CostRow
+                    label="Estimated gold value"
+                    value={formatCurrency(
+                      analysis.goldLoan
+                        .estimatedGoldValue,
+                    )}
+                  />
+
+                  <CostRow
+                    label="Conservative value-based limit"
+                    value={formatCurrency(
+                      analysis.goldLoan
+                        .maxLoanByGoldValue,
+                    )}
+                  />
+
+                  <CostRow
+                    label="Assessment LTV"
+                    value={`${analysis.goldLoan.conservativeLtvPercentage}%`}
+                    strong
+                  />
+                </div>
+              </ResultCard>
+            )}
+
+            {/* Assessment Summary */}
+            <AssessmentSummary analysis={analysis} />
+
+            {/* What You Can Do Next */}
+            <ResultCard title="What you can do next">
+              <div className="space-y-5">
+                <div>
+                  <h4 className="text-base font-semibold text-[#211A1E]">
+                    {analysis.negotiation.headline}
+                  </h4>
+
+                  <p className="mt-2 text-sm leading-6 text-[#756A70]">
+                    {analysis.negotiation.summary}
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {analysis.negotiation.suggestions.map(
+                    (suggestion) => (
+                      <div
+                        key={suggestion.title}
+                        className="rounded-xl border border-[#EAE4E6] bg-[#FAF9F8] p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h5 className="text-sm font-semibold text-[#211A1E]">
+                              {suggestion.title}
+                            </h5>
+
+                            <p className="mt-1.5 text-sm leading-6 text-[#756A70]">
+                              {suggestion.description}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide ${
+                              suggestion.priority === "HIGH"
+                                ? "bg-red-50 text-red-700"
+                                : suggestion.priority ===
+                                    "MEDIUM"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-[#F1ECEE] text-[#643652]"
+                            }`}
+                          >
+                            {suggestion.priority}
+                          </span>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            </ResultCard>
+          </div>
+        </section>
+
+        {/* NEGOTIATION CARD — ADDED */}
+        <section className="mt-8">
+          <NegotiationCard analysis={analysis} onStartAgain={onStartAgain} />
+        </section>
+
+        {/* Mobile Start Again */}
         <button
           type="button"
-          onClick={() => window.print()}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#4B2440] transition hover:bg-white/90"
+          onClick={onStartAgain}
+          className="mt-10 w-full rounded-xl bg-[#4B2440] px-5 py-4 text-sm font-semibold text-white sm:hidden"
         >
-          <Download size={16} />
-
-          Save / Print
+          Start new assessment
         </button>
       </div>
-    </section>
+    </main>
   );
 }
 
-interface CardMetricProps {
+/* ---------------------------------
+   Reusable Components
+---------------------------------- */
+
+interface MetricCardProps {
   label: string;
   value: string;
+  description: string;
+  highlight?: boolean;
 }
 
-function CardMetric({
+function MetricCard({
   label,
   value,
-}: CardMetricProps) {
+  description,
+  highlight = false,
+}: MetricCardProps) {
   return (
-    <div className="rounded-2xl border border-white/15 bg-white/5 p-5">
-      <p className="text-xs text-white/55">
+    <div
+      className={`rounded-2xl border p-6 ${
+        highlight
+          ? "border-[#4B2440] bg-[#F8F3F6]"
+          : "border-[#E6DFE2] bg-white"
+      }`}
+    >
+      <p className="text-sm font-medium text-[#756A70]">
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-semibold">
+      <p className="mt-3 text-3xl font-semibold tracking-tight">
         {value}
+      </p>
+
+      <p className="mt-2 text-xs text-[#84777E]">
+        {description}
       </p>
     </div>
   );
 }
 
-interface PriorityBadgeProps {
-  priority: "HIGH" | "MEDIUM" | "LOW";
+interface ResultCardProps {
+  title: string;
+  children: React.ReactNode;
 }
 
-function PriorityBadge({
-  priority,
-}: PriorityBadgeProps) {
-  const priorityStyles = {
-    HIGH: "bg-white text-[#4B2440]",
-    MEDIUM:
-      "border border-white/25 bg-white/10 text-white",
-    LOW:
-      "border border-white/15 bg-transparent text-white/70",
+function ResultCard({
+  title,
+  children,
+}: ResultCardProps) {
+  return (
+    <section className="rounded-2xl border border-[#E6DFE2] bg-white p-6 sm:p-7">
+      <h3 className="text-lg font-semibold">
+        {title}
+      </h3>
+
+      <div className="mt-6">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+interface CostRowProps {
+  label: string;
+  value: string;
+  strong?: boolean;
+}
+
+function CostRow({
+  label,
+  value,
+  strong = false,
+}: CostRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm text-[#756A70]">
+        {label}
+      </span>
+
+      <span
+        className={`text-sm ${
+          strong
+            ? "font-semibold text-[#211A1E]"
+            : "font-medium text-[#40383C]"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+interface ActionRecommendationProps {
+  recommendation: BorrowerRecommendation;
+}
+
+function ActionRecommendation({
+  recommendation,
+}: ActionRecommendationProps) {
+  const priorityConfig = {
+    high: {
+      label: "HIGH PRIORITY",
+      badge:
+        "bg-red-50 text-red-700 border-red-200",
+      dot: "bg-red-500",
+    },
+
+    medium: {
+      label: "MEDIUM PRIORITY",
+      badge:
+        "bg-amber-50 text-amber-700 border-amber-200",
+      dot: "bg-amber-500",
+    },
+
+    low: {
+      label: "TIP",
+      badge:
+        "bg-[#F3EEF1] text-[#643652] border-[#DED3D9]",
+      dot: "bg-[#643652]",
+    },
   };
 
+  const config =
+    priorityConfig[recommendation.priority];
+
   return (
-    <span
-      className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold tracking-[0.12em] ${priorityStyles[priority]}`}
-    >
-      {priority}
-    </span>
+    <div className="rounded-xl border border-[#EAE4E6] p-5">
+      <div className="flex items-start gap-3">
+        <span
+          className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${config.dot}`}
+        />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h4 className="font-semibold text-[#211A1E]">
+              {recommendation.title}
+            </h4>
+
+            <span
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.1em] ${config.badge}`}
+            >
+              {config.label}
+            </span>
+          </div>
+
+          <p className="mt-3 text-sm leading-6 text-[#756A70]">
+            {recommendation.description}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

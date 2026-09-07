@@ -171,6 +171,36 @@ export function generateNegotiationStrategy({
       });
       break;
 
+    /*
+     * ==================================
+     * GOLD LOAN — ADDED
+     * ==================================
+     */
+
+    case "gold":
+      suggestions.push({
+        title: "Keep the loan within your assessed gold-backed limit",
+        description:
+          "Avoid increasing the loan amount only because a lender is willing to offer more. Your borrowing should remain within both your affordability limit and the value-based limit of the gold you plan to pledge.",
+        priority: "HIGH",
+      });
+
+      suggestions.push({
+        title: "Compare gold valuation and loan-to-value",
+        description:
+          "Ask how the lender values your gold, what portion of that value they are willing to lend against, and how the final sanctioned amount is calculated.",
+        priority: "HIGH",
+      });
+
+      suggestions.push({
+        title: "Clarify auction and repayment conditions",
+        description:
+          "Before accepting the loan, understand the repayment due dates, overdue charges, notices, and the lender's process if the loan is not repaid on time.",
+        priority: "HIGH",
+      });
+
+      break;
+
     case "personal":
       suggestions.push({
         title: "Review whether the expense can be reduced",
@@ -206,6 +236,24 @@ export function generateNegotiationStrategy({
       description:
         "Available collateral may help improve lender eligibility or reduce borrowing costs compared with unsecured options.",
       priority: "MEDIUM",
+    });
+  }
+
+  /*
+   * ==================================
+   * EXISTING GOLD LOAN — ADDED
+   * ==================================
+   */
+
+  if (
+    profile.loanPurpose === "gold" &&
+    profile.hasExistingGoldLoan
+  ) {
+    suggestions.push({
+      title: "Review your existing gold-backed debt first",
+      description:
+        "Because you already have another loan against gold, compare the total repayment pressure across both loans before accepting additional borrowing.",
+      priority: "HIGH",
     });
   }
 
@@ -323,6 +371,16 @@ export function generateNegotiationStrategy({
         "A smaller loan may be more manageable",
       summary:
         "Your current request appears to be above a comfortable affordability level. Reducing the borrowing amount may improve your financial safety.",
+      suggestions,
+    };
+  }
+
+  if (profile.loanPurpose === "gold") {
+    return {
+      headline:
+        "Compare valuation, borrowing cost, and repayment conditions",
+      summary:
+        "Your Gold Loan request appears manageable based on the information provided, but you should still compare how different lenders value your gold and explain their repayment conditions.",
       suggestions,
     };
   }

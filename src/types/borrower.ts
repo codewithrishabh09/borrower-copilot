@@ -9,6 +9,7 @@ export type LoanPurpose =
   | "vehicle"
   | "home"
   | "education"
+  | "gold"
   | "other";
 
 export type CreditScoreStatus =
@@ -68,6 +69,13 @@ export interface BorrowerProfile {
   hasCoApplicant?: boolean;
 
   upcomingLargeExpense?: boolean;
+
+  /*
+   * Gold Loan specific information
+   */
+  goldEstimatedValue?: number;
+
+  hasExistingGoldLoan?: boolean;
 }
 
 export interface BorrowerAnswer {

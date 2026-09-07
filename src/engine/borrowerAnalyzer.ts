@@ -63,18 +63,38 @@ export interface BorrowerAnalysisResult {
 
   requestedLoan: {
     amount: number;
+
     interestRate: number;
+
     tenureMonths: number;
+
     monthlyEmi: number;
   };
 
   affordableLoanAmount: number;
 
+  /*
+   * Gold Loan assessment details.
+   *
+   * Null for all non-gold loan purposes.
+   */
+  goldLoan: {
+    estimatedGoldValue: number;
+
+    conservativeLtvPercentage: number;
+
+    maxLoanByGoldValue: number;
+  } | null;
+
   apr: {
     processingFee: number;
+
     netDisbursedAmount: number;
+
     totalPayment: number;
+
     totalInterest: number;
+
     estimatedApr: number;
   };
 
@@ -83,27 +103,6 @@ export interface BorrowerAnalysisResult {
   decision: BorrowingDecisionResult;
 }
 
-/**
- * Main borrower analysis pipeline.
- *
- * Loan Product
- * ↓
- * Interest Rate
- * ↓
- * Income Analysis
- * ↓
- * Affordability
- * ↓
- * Lender Eligibility
- * ↓
- * APR
- * ↓
- * Stress Test
- * ↓
- * Borrowing Decision
- * ↓
- * Negotiation Strategy
- */
 export function analyzeBorrower(
   profile: BorrowerProfile,
 ): BorrowerAnalysisResult {
@@ -187,11 +186,11 @@ export function analyzeBorrower(
 
   /*
    * ==================================
-   * 6. SAFE BORROWING AMOUNT
+   * 6. AFFORDABILITY-BASED LOAN LIMIT
    * ==================================
    */
 
-  const affordableLoanAmount =
+  const affordabilityBasedLoanAmount =
     calculateAffordableLoanAmount(
       affordability.safeMonthlyEmi,
       annualInterestRate,
@@ -200,7 +199,47 @@ export function analyzeBorrower(
 
   /*
    * ==================================
-   * 7. LENDER ELIGIBILITY
+   * 7. GOLD LOAN LTV LIMIT
+   * ==================================
+   *
+   * We use a conservative internal 70%
+   * of estimated gold value for this
+   * educational assessment.
+   */
+
+  const goldLoan =
+    profile.loanPurpose === "gold"
+      ? {
+          estimatedGoldValue:
+            profile.goldEstimatedValue ?? 0,
+
+          conservativeLtvPercentage: 70,
+
+          maxLoanByGoldValue: Math.round(
+            (profile.goldEstimatedValue ?? 0) * 0.7,
+          ),
+        }
+      : null;
+
+  /*
+   * The Gold Loan safe amount cannot
+   * exceed both:
+   *
+   * 1. Income affordability limit
+   * 2. Conservative gold-value limit
+   */
+
+  const affordableLoanAmount =
+    goldLoan
+      ? Math.min(
+          affordabilityBasedLoanAmount,
+          goldLoan.maxLoanByGoldValue,
+        )
+      : affordabilityBasedLoanAmount;
+
+  /*
+   * ==================================
+   * 8. LENDER ELIGIBILITY
    * ==================================
    */
 
@@ -212,21 +251,24 @@ export function analyzeBorrower(
 
   /*
    * ==================================
-   * 8. ALL-IN APR
+   * 9. ALL-IN APR
    * ==================================
    */
 
   const aprResult =
     calculateEffectiveApr({
       principal: requestedLoanAmount,
+
       annualInterestRate,
+
       tenureMonths,
+
       processingFeePercentage,
     });
 
   /*
    * ==================================
-   * 9. STRESS TEST
+   * 10. STRESS TEST
    * ==================================
    */
 
@@ -244,7 +286,7 @@ export function analyzeBorrower(
 
   /*
    * ==================================
-   * 10. FINAL BORROWING DECISION
+   * 11. FINAL BORROWING DECISION
    * ==================================
    */
 
@@ -275,7 +317,7 @@ export function analyzeBorrower(
 
   /*
    * ==================================
-   * 11. NEGOTIATION STRATEGY
+   * 12. NEGOTIATION STRATEGY
    * ==================================
    */
 
@@ -328,7 +370,10 @@ export function analyzeBorrower(
         requestedEmiResult.monthlyEmi,
     },
 
-    affordableLoanAmount,
+    affordableLoanAmount:
+      Math.round(affordableLoanAmount),
+
+    goldLoan,
 
     apr: {
       processingFee:

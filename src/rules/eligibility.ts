@@ -59,6 +59,15 @@ export function calculateEligibility({
       );
       break;
 
+    /*
+     * GOLD LOAN — ADDED
+     */
+    case "gold":
+      reasons.push(
+        "Gold-backed borrowing may provide additional lender comfort because the loan is supported by pledged eligible gold.",
+      );
+      break;
+
     case "business":
       eligibilityPercentage -= 5;
 
@@ -217,6 +226,37 @@ export function calculateEligibility({
       affordableLoanAmount * 0.5
     ) {
       eligibilityPercentage += 10;
+    }
+  }
+
+  /*
+   * ==================================
+   * GOLD LOAN — ADDED
+   * ==================================
+   */
+
+  if (profile.loanPurpose === "gold") {
+    if (
+      profile.goldEstimatedValue === undefined ||
+      profile.goldEstimatedValue <= 0
+    ) {
+      eligibilityPercentage -= 20;
+
+      warnings.push(
+        "The estimated value of the gold is unavailable, so Gold Loan eligibility is assessed more conservatively.",
+      );
+    } else {
+      reasons.push(
+        "The requested Gold Loan can be evaluated against the estimated value of the gold you plan to pledge.",
+      );
+    }
+
+    if (profile.hasExistingGoldLoan) {
+      eligibilityPercentage -= 10;
+
+      warnings.push(
+        "An existing loan against gold may increase your overall repayment pressure and reduce flexibility for additional borrowing.",
+      );
     }
   }
 
