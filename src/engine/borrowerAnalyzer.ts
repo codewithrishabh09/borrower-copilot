@@ -48,6 +48,36 @@ import {
   getLoanProduct,
 } from "../data/loanProducts";
 
+
+/* ==================================
+   GOLD LOAN TYPES
+================================== */
+
+export type GoldLoanLimitingFactor =
+  | "gold_value"
+  | "monthly_affordability"
+  | "both";
+
+
+export interface GoldLoanAssessment {
+  estimatedGoldValue: number;
+
+  conservativeLtvPercentage: number;
+
+  maxLoanByGoldValue: number;
+
+  affordabilityBasedLoanAmount: number;
+
+  finalSafeAmount: number;
+
+  limitingFactor: GoldLoanLimitingFactor;
+}
+
+
+/* ==================================
+   MAIN RESULT TYPE
+================================== */
+
 export interface BorrowerAnalysisResult {
   profile: BorrowerProfile;
 
@@ -73,18 +103,12 @@ export interface BorrowerAnalysisResult {
 
   affordableLoanAmount: number;
 
-  /*
+  /**
    * Gold Loan assessment details.
    *
    * Null for all non-gold loan purposes.
    */
-  goldLoan: {
-    estimatedGoldValue: number;
-
-    conservativeLtvPercentage: number;
-
-    maxLoanByGoldValue: number;
-  } | null;
+  goldLoan: GoldLoanAssessment | null;
 
   apr: {
     processingFee: number;
@@ -103,14 +127,18 @@ export interface BorrowerAnalysisResult {
   decision: BorrowingDecisionResult;
 }
 
+
+/* ==================================
+   MAIN ANALYZER
+================================== */
+
 export function analyzeBorrower(
   profile: BorrowerProfile,
 ): BorrowerAnalysisResult {
-  /*
-   * ==================================
-   * 1. LOAN PRODUCT
-   * ==================================
-   */
+
+  /* ==================================
+     1. LOAN PRODUCT
+  ================================== */
 
   const loanProduct = getLoanProduct(
     profile.loanPurpose,
@@ -125,45 +153,38 @@ export function analyzeBorrower(
   const processingFeePercentage =
     loanProduct.processingFeePercentage;
 
-  /*
-   * ==================================
-   * 2. INTEREST RATE RANGE
-   * ==================================
-   */
+
+  /* ==================================
+     2. INTEREST RATE
+  ================================== */
 
   const interestRate =
     calculateInterestRate({
       profile,
     });
 
-  /*
-   * Midpoint of fair rate range is used
-   * for EMI and APR calculations.
-   */
-
   const annualInterestRate =
     Number(
       (
-        (interestRate.fairRateMin +
-          interestRate.fairRateMax) /
-        2
+        (
+          interestRate.fairRateMin +
+          interestRate.fairRateMax
+        ) / 2
       ).toFixed(2),
     );
 
-  /*
-   * ==================================
-   * 3. NORMALIZE INCOME
-   * ==================================
-   */
+
+  /* ==================================
+     3. NORMALIZE INCOME
+  ================================== */
 
   const income =
     calculateUsableIncome(profile);
 
-  /*
-   * ==================================
-   * 4. BORROWER AFFORDABILITY
-   * ==================================
-   */
+
+  /* ==================================
+     4. BORROWER AFFORDABILITY
+  ================================== */
 
   const affordability =
     calculateProfileAffordability(
@@ -171,11 +192,10 @@ export function analyzeBorrower(
       income.usableMonthlyIncome,
     );
 
-  /*
-   * ==================================
-   * 5. REQUESTED EMI
-   * ==================================
-   */
+
+  /* ==================================
+     5. REQUESTED EMI
+  ================================== */
 
   const requestedEmiResult =
     calculateEmi({
@@ -184,64 +204,106 @@ export function analyzeBorrower(
       tenureMonths,
     });
 
-  /*
-   * ==================================
-   * 6. AFFORDABILITY-BASED LOAN LIMIT
-   * ==================================
-   */
+
+  /* ==================================
+     6. AFFORDABILITY-BASED LIMIT
+  ================================== */
 
   const affordabilityBasedLoanAmount =
-    calculateAffordableLoanAmount(
-      affordability.safeMonthlyEmi,
-      annualInterestRate,
-      tenureMonths,
+    Math.round(
+      calculateAffordableLoanAmount(
+        affordability.safeMonthlyEmi,
+        annualInterestRate,
+        tenureMonths,
+      ),
     );
 
-  /*
-   * ==================================
-   * 7. GOLD LOAN LTV LIMIT
-   * ==================================
-   *
-   * We use a conservative internal 70%
-   * of estimated gold value for this
-   * educational assessment.
-   */
 
-  const goldLoan =
-    profile.loanPurpose === "gold"
-      ? {
-          estimatedGoldValue:
-            profile.goldEstimatedValue ?? 0,
+  /* ==================================
+     7. GOLD LOAN LIMIT
+  ==================================
 
-          conservativeLtvPercentage: 70,
+     For Gold Loans, we use a
+     conservative internal LTV of 70%.
 
-          maxLoanByGoldValue: Math.round(
-            (profile.goldEstimatedValue ?? 0) * 0.7,
-          ),
-        }
-      : null;
+     Final safe amount is limited by:
 
-  /*
-   * The Gold Loan safe amount cannot
-   * exceed both:
-   *
-   * 1. Income affordability limit
-   * 2. Conservative gold-value limit
-   */
+     1. Monthly affordability
+     2. Gold-backed borrowing capacity
+  ================================== */
+
+  let goldLoan: GoldLoanAssessment | null =
+    null;
+
+  if (profile.loanPurpose === "gold") {
+
+    const estimatedGoldValue =
+      Math.max(
+        0,
+        profile.goldEstimatedValue ?? 0,
+      );
+
+    const conservativeLtvPercentage =
+      70;
+
+    const maxLoanByGoldValue =
+      Math.round(
+        estimatedGoldValue *
+          (conservativeLtvPercentage / 100),
+      );
+
+    const finalSafeAmount =
+      Math.min(
+        affordabilityBasedLoanAmount,
+        maxLoanByGoldValue,
+      );
+
+    let limitingFactor: GoldLoanLimitingFactor;
+
+    if (
+      affordabilityBasedLoanAmount ===
+      maxLoanByGoldValue
+    ) {
+      limitingFactor = "both";
+    } else if (
+      maxLoanByGoldValue <
+      affordabilityBasedLoanAmount
+    ) {
+      limitingFactor = "gold_value";
+    } else {
+      limitingFactor =
+        "monthly_affordability";
+    }
+
+    goldLoan = {
+      estimatedGoldValue,
+
+      conservativeLtvPercentage,
+
+      maxLoanByGoldValue,
+
+      affordabilityBasedLoanAmount,
+
+      finalSafeAmount,
+
+      limitingFactor,
+    };
+  }
+
+
+  /* ==================================
+     8. FINAL SAFE LOAN AMOUNT
+  ================================== */
 
   const affordableLoanAmount =
     goldLoan
-      ? Math.min(
-          affordabilityBasedLoanAmount,
-          goldLoan.maxLoanByGoldValue,
-        )
+      ? goldLoan.finalSafeAmount
       : affordabilityBasedLoanAmount;
 
-  /*
-   * ==================================
-   * 8. LENDER ELIGIBILITY
-   * ==================================
-   */
+
+  /* ==================================
+     9. LENDER ELIGIBILITY
+  ================================== */
 
   const eligibility =
     calculateEligibility({
@@ -249,28 +311,23 @@ export function analyzeBorrower(
       affordableLoanAmount,
     });
 
-  /*
-   * ==================================
-   * 9. ALL-IN APR
-   * ==================================
-   */
+
+  /* ==================================
+     10. APR CALCULATION
+  ================================== */
 
   const aprResult =
     calculateEffectiveApr({
       principal: requestedLoanAmount,
-
       annualInterestRate,
-
       tenureMonths,
-
       processingFeePercentage,
     });
 
-  /*
-   * ==================================
-   * 10. STRESS TEST
-   * ==================================
-   */
+
+  /* ==================================
+     11. STRESS TEST
+  ================================== */
 
   const stressTest =
     runStressTest({
@@ -284,11 +341,10 @@ export function analyzeBorrower(
         affordability.safetyAdjustmentPercentage,
     });
 
-  /*
-   * ==================================
-   * 11. FINAL BORROWING DECISION
-   * ==================================
-   */
+
+  /* ==================================
+     12. FINAL BORROWING DECISION
+  ================================== */
 
   const decision =
     calculateBorrowingDecision({
@@ -315,11 +371,10 @@ export function analyzeBorrower(
         stressTest.worstCaseAffordable,
     });
 
-  /*
-   * ==================================
-   * 12. NEGOTIATION STRATEGY
-   * ==================================
-   */
+
+  /* ==================================
+     13. NEGOTIATION STRATEGY
+  ================================== */
 
   const negotiation =
     generateNegotiationStrategy({
@@ -345,6 +400,11 @@ export function analyzeBorrower(
         requestedEmiResult.monthlyEmi,
     });
 
+
+  /* ==================================
+     14. RETURN FINAL ANALYSIS
+  ================================== */
+
   return {
     profile,
 
@@ -361,8 +421,7 @@ export function analyzeBorrower(
     requestedLoan: {
       amount: requestedLoanAmount,
 
-      interestRate:
-        annualInterestRate,
+      interestRate: annualInterestRate,
 
       tenureMonths,
 
@@ -371,7 +430,9 @@ export function analyzeBorrower(
     },
 
     affordableLoanAmount:
-      Math.round(affordableLoanAmount),
+      Math.round(
+        affordableLoanAmount,
+      ),
 
     goldLoan,
 
