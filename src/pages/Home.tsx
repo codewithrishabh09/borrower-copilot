@@ -1,4 +1,5 @@
 import { ArrowRight, ShieldCheck, Scale, WalletCards } from "lucide-react";
+import Logo from "../components/Logo";
 
 interface HomeProps {
   onStart: () => void;
@@ -11,14 +12,13 @@ export default function Home({ onStart }: HomeProps) {
         {/* Header */}
         <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white shadow-sm">
-              BC
-            </div>
+            <Logo size={40} />
 
             <div>
               <h1 className="text-base font-semibold tracking-tight">
                 Borrower Copilot
               </h1>
+
               <p className="text-xs text-[#756A70]">
                 Know your position before you borrow.
               </p>
@@ -197,6 +197,7 @@ function Outcome({ number, title, description }: OutcomeProps) {
 
       <div>
         <h4 className="font-semibold">{title}</h4>
+
         <p className="mt-1 text-sm leading-6 text-[#756A70]">
           {description}
         </p>

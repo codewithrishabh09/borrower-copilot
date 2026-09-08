@@ -1,5 +1,7 @@
 import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
+
+import Logo from "../components/Logo";
 import ProgressBar from "../components/ProgressBar";
 import QuestionCard from "../components/QuestionCard";
 
@@ -43,9 +45,6 @@ export default function Questions({
 
     let formattedValue: string | number | boolean = value;
 
-    /*
-     * Convert yes/no string values into booleans.
-     */
     if (currentQuestion.type === "yes_no") {
       formattedValue = value === "true";
     }
@@ -104,9 +103,7 @@ export default function Questions({
             onClick={onExit}
             className="flex items-center gap-3 text-left"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white">
-              BC
-            </div>
+            <Logo size={40} />
 
             <div>
               <p className="text-base font-semibold">

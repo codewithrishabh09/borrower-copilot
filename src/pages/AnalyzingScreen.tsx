@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import Logo from "../components/Logo";
+
 interface AnalyzingScreenProps {
   onComplete: () => void;
 }
@@ -46,7 +48,9 @@ export default function AnalyzingScreen({
     }
 
     const timer = window.setTimeout(() => {
-      setCurrentStep((previousStep) => previousStep + 1);
+      setCurrentStep(
+        (previousStep) => previousStep + 1,
+      );
     }, 900);
 
     return () => window.clearTimeout(timer);
@@ -57,9 +61,7 @@ export default function AnalyzingScreen({
       <section className="w-full max-w-xl">
         {/* Brand */}
         <div className="mb-10 flex items-center justify-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#4B2440] font-bold text-white">
-            BC
-          </div>
+          <Logo size={44} />
 
           <div>
             <h1 className="font-semibold">

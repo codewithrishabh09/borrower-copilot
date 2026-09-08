@@ -20,12 +20,10 @@ import PlanComparison from "../components/PlanComparison";
 
 import AssessmentSummary from "../components/AssessmentSummary";
 
-
 interface ResultsProps {
   analysis: BorrowerAnalysisResult;
   onStartAgain: () => void;
 }
-
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -34,7 +32,6 @@ function formatCurrency(value: number) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-
 
 function getRecommendationConfig(
   recommendation:
@@ -81,7 +78,6 @@ function getRecommendationConfig(
   }
 }
 
-
 function getGoldLimitingFactorMessage(
   limitingFactor:
     | "gold_value"
@@ -112,7 +108,6 @@ function getGoldLimitingFactorMessage(
   }
 }
 
-
 export default function Results({
   analysis,
   onStartAgain,
@@ -121,8 +116,7 @@ export default function Results({
     analysis.decision.recommendation,
   );
 
-  const RecommendationIcon =
-    recommendationConfig.icon;
+  const RecommendationIcon = recommendationConfig.icon;
 
   const recommendationResult =
     generateRecommendations(analysis);
@@ -142,9 +136,13 @@ export default function Results({
         {/* Header */}
         <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4B2440] text-sm font-bold text-white">
-              BC
-            </div>
+
+            {/* Logo */}
+            <img
+              src="/borrower-copilot-logo.png"
+              alt="Borrower Copilot"
+              className="h-10 w-10 rounded-xl object-contain"
+            />
 
             <div>
               <h1 className="font-semibold">
@@ -166,7 +164,6 @@ export default function Results({
             Start again
           </button>
         </header>
-
 
         {/* Recommendation Hero */}
         <section
@@ -202,7 +199,6 @@ export default function Results({
             </div>
           </div>
         </section>
-
 
         {/* Main Metrics */}
         <section className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -262,7 +258,6 @@ export default function Results({
 
         </section>
 
-
         {/* Gold Loan Snapshot */}
         {goldLoan && goldLimitMessage && (
           <section className="mt-8 overflow-hidden rounded-2xl border border-[#E5D7C7] bg-[#FFFCF6]">
@@ -307,7 +302,6 @@ export default function Results({
               </div>
             </div>
 
-
             <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4 sm:p-7">
 
               <GoldMetric
@@ -342,7 +336,6 @@ export default function Results({
 
             </div>
 
-
             <div className="mx-6 mb-6 rounded-xl border border-[#E9DDD1] bg-white p-5 sm:mx-7 sm:mb-7">
 
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#756A70]">
@@ -362,14 +355,12 @@ export default function Results({
           </section>
         )}
 
-
         {/* Main Content */}
         <section className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
 
           {/* Left Column */}
           <div className="space-y-8">
 
-            {/* Why this recommendation */}
             <ResultCard title="Why this recommendation">
               <div className="space-y-4">
 
@@ -412,8 +403,6 @@ export default function Results({
               </div>
             </ResultCard>
 
-
-            {/* Personalized Recommendations */}
             <ResultCard title="What you can do next">
               <p className="mb-6 text-sm leading-6 text-[#756A70]">
                 These recommendations are based on your
@@ -433,12 +422,8 @@ export default function Results({
               </div>
             </ResultCard>
 
-
-            {/* Plan Comparison */}
             <PlanComparison analysis={analysis} />
 
-
-            {/* Income Stress Test */}
             <ResultCard title="Income stress test">
               <p className="mb-6 text-sm leading-6 text-[#756A70]">
                 This shows how the proposed EMI performs
@@ -492,11 +477,9 @@ export default function Results({
 
           </div>
 
-
           {/* Right Column */}
           <div className="space-y-8">
 
-            {/* Borrowing Cost */}
             <ResultCard title="Borrowing cost">
               <div className="space-y-5">
 
@@ -537,8 +520,6 @@ export default function Results({
               </div>
             </ResultCard>
 
-
-            {/* Financial Snapshot */}
             <ResultCard title="Financial snapshot">
               <div className="space-y-5">
 
@@ -574,13 +555,9 @@ export default function Results({
               </div>
             </ResultCard>
 
-
-            {/* Assessment Summary */}
             <AssessmentSummary analysis={analysis} />
 
-
-            {/* Negotiation Guidance */}
-            <ResultCard title="What you can do next">
+            <ResultCard title="Negotiation guidance">
               <div className="space-y-5">
 
                 <div>
@@ -618,8 +595,8 @@ export default function Results({
                               suggestion.priority === "HIGH"
                                 ? "bg-red-50 text-red-700"
                                 : suggestion.priority === "MEDIUM"
-                                ? "bg-amber-50 text-amber-700"
-                                : "bg-[#F1ECEE] text-[#643652]"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-[#F1ECEE] text-[#643652]"
                             }`}
                           >
                             {suggestion.priority}
@@ -638,7 +615,6 @@ export default function Results({
 
         </section>
 
-
         {/* Mobile Start Again */}
         <button
           type="button"
@@ -653,11 +629,9 @@ export default function Results({
   );
 }
 
-
 /* ---------------------------------
    Reusable Components
 ---------------------------------- */
-
 
 interface MetricCardProps {
   label: string;
@@ -665,7 +639,6 @@ interface MetricCardProps {
   description: string;
   highlight?: boolean;
 }
-
 
 function MetricCard({
   label,
@@ -696,13 +669,11 @@ function MetricCard({
   );
 }
 
-
 interface GoldMetricProps {
   label: string;
   value: string;
   description: string;
 }
-
 
 function GoldMetric({
   label,
@@ -726,12 +697,10 @@ function GoldMetric({
   );
 }
 
-
 interface ResultCardProps {
   title: string;
   children: ReactNode;
 }
-
 
 function ResultCard({
   title,
@@ -752,13 +721,11 @@ function ResultCard({
   );
 }
 
-
 interface CostRowProps {
   label: string;
   value: string;
   strong?: boolean;
 }
-
 
 function CostRow({
   label,
@@ -786,11 +753,9 @@ function CostRow({
   );
 }
 
-
 interface ActionRecommendationProps {
   recommendation: BorrowerRecommendation;
 }
-
 
 function ActionRecommendation({
   recommendation,
@@ -824,12 +789,15 @@ function ActionRecommendation({
   return (
     <div className="rounded-xl border border-[#EAE4E6] p-5">
       <div className="flex items-start gap-3">
+
         <span
           className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${config.dot}`}
         />
 
         <div className="min-w-0 flex-1">
+
           <div className="flex flex-wrap items-center justify-between gap-3">
+
             <h4 className="font-semibold text-[#211A1E]">
               {recommendation.title}
             </h4>
@@ -839,11 +807,13 @@ function ActionRecommendation({
             >
               {config.label}
             </span>
+
           </div>
 
           <p className="mt-3 text-sm leading-6 text-[#756A70]">
             {recommendation.description}
           </p>
+
         </div>
       </div>
     </div>
