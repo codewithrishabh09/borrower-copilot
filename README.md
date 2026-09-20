@@ -59,3 +59,4 @@ All thresholds and rules are documented — with rationale — in [`RULES.md`](.
 ## ⚠️ Limitations & assumptions
 
 See the "why / source or judgement" column in `RULES.md` for every place a threshold was estimated rather than sourced from an official FOIR/RBI guideline.
+
