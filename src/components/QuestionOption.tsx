@@ -1,9 +1,9 @@
-import type { QuestionOption as QuestionOptionType } from "../questions/mustQuestions";
+import type { Question } from "../questions/mustQuestions";
 
 interface QuestionOptionProps {
-  option: QuestionOptionType;
+  option: Question["options"][number];
   selected: boolean;
-  onSelect: (value: string) => void;
+  onSelect: (value: string | number) => void;
 }
 
 export default function QuestionOption({
@@ -13,44 +13,48 @@ export default function QuestionOption({
 }: QuestionOptionProps) {
   return (
     <button
-      type="button"
       onClick={() => onSelect(option.value)}
-      className={`group relative w-full rounded-2xl border p-5 text-left transition-all duration-200 ${
+      className={`rounded-xl border border-[#E6DFE2] bg-white p-4 sm:p-5 min-h-[48px] flex items-center gap-3 text-left transition ${
         selected
-          ? "border-[#4B2440] bg-[#F4EDF1] shadow-[0_8px_25px_rgba(75,36,64,0.08)]"
-          : "border-[#E6DFE2] bg-white hover:border-[#B99CAC] hover:bg-[#FCFAFB]"
+          ? "border-[#4B2440] bg-[#F4EDF1]"
+          : "hover:bg-[#F5F2F4]"
       }`}
     >
-      <div className="flex items-start gap-4">
-        {/* Selection indicator */}
-        <div
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
-            selected
-              ? "border-[#4B2440] bg-[#4B2440]"
-              : "border-[#CFC5C9] bg-white group-hover:border-[#8A647C]"
-          }`}
-        >
-          {selected && (
-            <div className="h-2 w-2 rounded-full bg-white" />
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="min-w-0">
-          <p
-            className={`font-semibold ${
-              selected ? "text-[#4B2440]" : "text-[#211A1E]"
-            }`}
+      {/* Radio/Checkbox circle */}
+      <div
+        className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition ${
+          selected
+            ? "border-[#4B2440] bg-[#4B2440]"
+            : "border-[#D0C5CB] bg-white"
+        }`}
+      >
+        {selected && (
+          <svg
+            className="h-3.5 w-3.5 text-white"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={3}
           >
-            {option.label}
-          </p>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+        )}
+      </div>
 
-          {option.description && (
-            <p className="mt-1 text-sm leading-6 text-[#756A70]">
-              {option.description}
-            </p>
-          )}
-        </div>
+      {/* Text content */}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold text-[#211A1E]">
+          {option.label}
+        </h3>
+        {option.description && (
+          <p className="mt-1 text-xs sm:text-sm leading-5 text-[#756A70]">
+            {option.description}
+          </p>
+        )}
       </div>
     </button>
   );

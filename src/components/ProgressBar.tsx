@@ -7,37 +7,25 @@ export default function ProgressBar({
   current,
   total,
 }: ProgressBarProps) {
-  const safeTotal = Math.max(total, 1);
-
-  const progress = Math.min(
-    Math.max((current / safeTotal) * 100, 0),
-    100,
-  );
+  const percentage = Math.round((current / total) * 100);
 
   return (
-    <div className="w-full">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-medium text-[#756A70]">
-          Assessment progress
+    <div className="w-full space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs sm:text-sm font-medium text-[#756A70]">
+          Question {current} of {total}
         </p>
 
-        <p className="text-sm font-semibold text-[#4B2440]">
-          {current} of {total}
-        </p>
+        <span className="text-xs sm:text-sm font-semibold text-[#756A70]">
+          {percentage}%
+        </span>
       </div>
 
-      <div
-        className="h-2 w-full overflow-hidden rounded-full bg-[#ECE6E9]"
-        aria-label="Assessment progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress}
-        role="progressbar"
-      >
+      <div className="h-1.5 sm:h-2 w-full overflow-hidden rounded-full bg-[#E6DFE2]">
         <div
-          className="h-full rounded-full bg-[#4B2440] transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
-        />
+          className="h-full bg-gradient-to-r from-[#4B2440] to-[#643652] transition-all duration-300"
+          style={{ width: `${percentage}%` }}
+        ></div>
       </div>
     </div>
   );

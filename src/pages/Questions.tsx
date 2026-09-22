@@ -95,7 +95,7 @@ export default function Questions({
 
   return (
     <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
-      <div className="mx-auto flex min-h-screen max-w-4xl flex-col px-6 py-6 sm:px-10">
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
           <button
