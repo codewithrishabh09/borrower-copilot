@@ -8,7 +8,7 @@ interface HomeProps {
 export default function Home({ onStart }: HomeProps) {
   return (
     <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6 md:px-10 lg:px-16">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 sm:px-6 md:px-8 lg:px-10 xl:px-16 py-4 sm:py-6 md:py-8">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
           <div className="flex items-center gap-3">
@@ -33,7 +33,7 @@ export default function Home({ onStart }: HomeProps) {
 
         {/* Hero */}
         <section className="flex flex-1 items-center py-16 lg:py-24">
-          <div className="grid w-full items-center gap-14 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid w-full items-center gap-8 sm:gap-10 md:gap-12 lg:gap-14 lg:grid-cols-[1.1fr_0.9fr]">
             {/* Left */}
             <div className="max-w-3xl">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#E4D9DF] bg-[#F4EDF1] px-4 py-2 text-sm font-medium text-[#643652]">
@@ -41,7 +41,7 @@ export default function Home({ onStart }: HomeProps) {
                 Indian borrower self-assessment
               </div>
 
-              <h2 className="max-w-3xl text-5xl font-semibold leading-[1.05] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
+              <h2 className="max-w-3xl text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold leading-[1.05] tracking-[-0.04em]">
                 Borrow with{" "}
                 <span className="text-[#643652]">clarity</span>, not pressure.
               </h2>
@@ -71,7 +71,7 @@ export default function Home({ onStart }: HomeProps) {
               </div>
 
               {/* Trust points */}
-              <div className="mt-12 grid gap-4 sm:grid-cols-3">
+              <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Feature
                   icon={<Scale size={19} />}
                   title="Independent view"

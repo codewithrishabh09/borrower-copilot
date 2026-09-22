@@ -155,14 +155,25 @@ export default function Results({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onStartAgain}
-            className="hidden items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE] sm:inline-flex"
-          >
-            <ArrowLeft size={17} />
-            Start again
-          </button>
+          {/* Mobile back button */}
+            <button
+              type="button"
+              onClick={onStartAgain}
+              className="inline-flex sm:hidden items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-[#756A70] transition hover:bg-[#F1ECEE] min-h-[44px]"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+
+            {/* Desktop start again button */}
+            <button
+              type="button"
+              onClick={onStartAgain}
+              className="hidden sm:inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE]"
+            >
+              <ArrowLeft size={17} />
+              Start again
+            </button>
         </header>
 
         {/* Recommendation Hero */}
