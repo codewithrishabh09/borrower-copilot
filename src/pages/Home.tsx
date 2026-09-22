@@ -153,7 +153,7 @@ export default function Home({ onStart }: HomeProps) {
 
         {/* Footer */}
         <footer className="border-t border-[#E6E0E2] pt-5 text-sm text-[#84777E]">
-          Borrower Copilot · A transparent financial self-assessment
+          Borrower Copilot · A transparent financial self-assessment by Rishabh 
         </footer>
       </div>
     </main>
