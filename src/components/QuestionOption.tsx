@@ -1,7 +1,11 @@
-import type { Question } from "../questions/mustQuestions";
+interface OptionItem {
+  label: string;
+  value: string | number;
+  description?: string;
+}
 
 interface QuestionOptionProps {
-  option: Question["options"][number];
+  option: OptionItem;
   selected: boolean;
   onSelect: (value: string | number) => void;
 }
