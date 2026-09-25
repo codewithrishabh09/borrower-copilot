@@ -9,17 +9,15 @@ export default function Logo({
 }: LogoProps) {
   return (
     <div
-      className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#8A4D7B] via-[#6D3B63] to-[#32172B] text-white shadow-[0_8px_30px_rgba(109,59,99,0.35)] ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-xl border border-[#A66A96]/25 bg-[#6D3B63]/15 text-[#D5A9CA] shadow-[0_8px_24px_rgba(109,59,99,0.15)] ${className}`}
       style={{
         width: size,
         height: size,
       }}
       aria-label="Borrower Copilot"
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.22),transparent_45%)]" />
-
       <span
-        className="relative font-bold leading-none"
+        className="font-bold leading-none"
         style={{
           fontSize: size * 0.58,
         }}

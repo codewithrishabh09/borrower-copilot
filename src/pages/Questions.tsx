@@ -48,7 +48,10 @@ export default function Questions({
 
   const isCurrentQuestionValid =
     currentQuestion
-      ? isQuestionValid(currentQuestion, profile)
+      ? isQuestionValid(
+          currentQuestion,
+          profile,
+        )
       : false;
 
   function handleAnswer(
@@ -63,8 +66,11 @@ export default function Questions({
       | number
       | boolean = value;
 
-    if (currentQuestion.type === "yes_no") {
-      formattedValue = value === "true";
+    if (
+      currentQuestion.type === "yes_no"
+    ) {
+      formattedValue =
+        value === "true";
     }
 
     setProfile((previousProfile) =>
@@ -111,75 +117,105 @@ export default function Questions({
     );
   }
 
+  /*
+   * Fallback state.
+   * This does not change the existing
+   * question flow logic.
+   */
   if (!currentQuestion) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#08070A] px-6">
-        <p className="text-sm text-[#A59AA4]">
-          Preparing your assessment...
-        </p>
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08070A] px-6 text-[#F5F1F4]">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#6D3B63]/10 blur-[120px]" />
+
+        <div className="relative text-center">
+          <div className="mx-auto mb-5">
+            <Logo size={48} />
+          </div>
+
+          <div className="mx-auto mb-4 h-1.5 w-16 overflow-hidden rounded-full bg-white/[0.07]">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-[#8A4D7B]" />
+          </div>
+
+          <p className="text-sm font-medium text-[#817783]">
+            Preparing your assessment...
+          </p>
+        </div>
       </main>
     );
   }
 
-  const progress =
+  const progress = Math.min(
     ((currentIndex + 1) /
-      visibleQuestions.length) *
-    100;
+      Math.max(
+        visibleQuestions.length,
+        1,
+      )) *
+      100,
+    100,
+  );
 
   return (
-    <main className="fintech-shell min-h-screen bg-[#08070A] text-[#F5F1F4]">
-      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-5 py-5 sm:px-8 lg:px-10">
-        <header className="flex items-center justify-between border-b border-white/[0.08] pb-5">
-          <button
-            type="button"
-            onClick={onExit}
-            className="flex items-center gap-3 text-left"
-          >
-            <Logo size={40} />
+    <main className="min-h-screen overflow-hidden bg-[#08070A] text-[#F5F1F4]">
+      {/* Ambient background */}
+      <div className="pointer-events-none fixed -right-48 -top-48 h-[520px] w-[520px] rounded-full bg-[#6D3B63]/10 blur-[130px]" />
 
-            <div>
-              <p className="text-sm font-semibold">
-                Borrower Copilot
-              </p>
+      <div className="pointer-events-none fixed -bottom-52 -left-48 h-[520px] w-[520px] rounded-full bg-[#4B2440]/10 blur-[130px]" />
 
-              <p className="text-[10px] uppercase tracking-[0.12em] text-[#716873]">
-                Financial intelligence
-              </p>
+      <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col px-5 py-5 sm:px-8">
+        {/* =========================================
+            HEADER
+        ========================================== */}
+
+        <header className="rounded-2xl border border-white/[0.08] bg-[#0D0A0F]/80 px-4 py-3 backdrop-blur-xl sm:px-5">
+          <div className="flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={onExit}
+              className="group flex items-center gap-3 text-left"
+            >
+              <Logo size={40} />
+
+              <div>
+                <p className="text-sm font-semibold tracking-tight text-[#F5F1F4]">
+                  Borrower Copilot
+                </p>
+
+                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#716873]">
+                  Financial assessment
+                </p>
+              </div>
+            </button>
+
+            {/* Privacy badge */}
+            <div className="hidden items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.025] px-3.5 py-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[#716873] sm:flex">
+              <ShieldCheck
+                size={14}
+                className="text-[#39D39F]"
+              />
+
+              Private session
             </div>
-          </button>
-
-          <div className="hidden items-center gap-2 text-xs text-[#716873] sm:flex">
-            <ShieldCheck
-              size={16}
-              className="text-[#A66A96]"
-            />
-
-            <span>
-              Your assessment stays on this device
-            </span>
           </div>
         </header>
 
-        <div className="py-7">
+        {/* =========================================
+            PROGRESS
+        ========================================== */}
+
+        <div className="py-7 sm:py-8">
           <ProgressBar
             current={currentIndex + 1}
             total={visibleQuestions.length}
           />
         </div>
 
-        <div className="flex flex-1 items-center py-8">
+        {/* =========================================
+            QUESTION AREA
+        ========================================== */}
+
+        <section className="flex flex-1 items-center py-6 sm:py-10">
           <div className="w-full">
-            <div className="mb-7 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#5F5760]">
-                Profile signal
-              </span>
-
-              <span className="text-[10px] text-[#5F5760]">
-                {Math.round(progress)}% complete
-              </span>
-            </div>
-
-            <div className="fintech-card fintech-card-hover rounded-[28px] p-6 sm:p-9 lg:p-11">
+            <div className="mx-auto max-w-3xl">
               <QuestionCard
                 question={currentQuestion}
                 value={currentValue}
@@ -187,46 +223,80 @@ export default function Questions({
               />
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="flex items-center justify-between border-t border-white/[0.08] pt-5">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-[#817783] transition hover:bg-white/[0.05] hover:text-[#D0C8CE]"
-          >
-            <ArrowLeft size={17} />
+        {/* =========================================
+            BOTTOM NAVIGATION
+        ========================================== */}
 
-            {currentIndex === 0
-              ? "Exit"
-              : "Back"}
-          </button>
+        <div className="border-t border-white/[0.07] pt-5">
+          <div className="flex items-center justify-between gap-4">
+            {/* Back / Exit */}
+            <button
+              type="button"
+              onClick={handleBack}
+              className="group inline-flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-sm font-semibold text-[#817783] transition duration-200 hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-[#E5DEE3]"
+            >
+              <ArrowLeft
+                size={17}
+                className="transition-transform duration-200 group-hover:-translate-x-0.5"
+              />
 
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={!isCurrentQuestionValid}
-            className={`group inline-flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition ${
-              isCurrentQuestionValid
-                ? "bg-gradient-to-r from-[#6D3B63] to-[#8A4D7B] text-white shadow-[0_12px_35px_rgba(109,59,99,0.25)] hover:-translate-y-0.5"
-                : "cursor-not-allowed bg-white/[0.06] text-[#5B555C]"
-            }`}
-          >
-            {currentIndex ===
-            visibleQuestions.length - 1
-              ? "See my assessment"
-              : "Continue"}
+              <span>
+                {currentIndex === 0
+                  ? "Exit"
+                  : "Back"}
+              </span>
+            </button>
 
-            <ArrowRight
-              size={17}
-              className={
-                isCurrentQuestionValid
-                  ? "transition-transform group-hover:translate-x-1"
-                  : ""
+            {/* Desktop progress indicator */}
+            <div className="hidden text-right sm:block">
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#514A51]">
+                Assessment
+              </p>
+
+              <p className="mt-1 text-xs font-semibold text-[#817783]">
+                {Math.round(progress)}%
+                <span className="ml-1 font-normal text-[#514A51]">
+                  complete
+                </span>
+              </p>
+            </div>
+
+            {/* Continue */}
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={
+                !isCurrentQuestionValid
               }
-            />
-          </button>
+              className={`group inline-flex items-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold transition duration-200 sm:px-6 ${
+                isCurrentQuestionValid
+                  ? "bg-gradient-to-r from-[#6D3B63] to-[#8A4D7B] text-white shadow-[0_12px_35px_rgba(109,59,99,0.22)] hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(109,59,99,0.3)]"
+                  : "cursor-not-allowed bg-white/[0.06] text-[#514A51]"
+              }`}
+            >
+              <span>
+                {currentIndex ===
+                visibleQuestions.length - 1
+                  ? "See my assessment"
+                  : "Continue"}
+              </span>
+
+              <ArrowRight
+                size={17}
+                className={
+                  isCurrentQuestionValid
+                    ? "transition-transform duration-200 group-hover:translate-x-0.5"
+                    : ""
+                }
+              />
+            </button>
+          </div>
         </div>
+
+        {/* Bottom safe-space */}
+        <div className="h-2" />
       </div>
     </main>
   );

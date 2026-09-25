@@ -7,10 +7,14 @@ export default function ProgressBar({
   current,
   total,
 }: ProgressBarProps) {
-  const safeTotal = Math.max(total, 1);
+  const safeTotal =
+    Math.max(total, 1);
 
   const progress = Math.min(
-    Math.max((current / safeTotal) * 100, 0),
+    Math.max(
+      (current / safeTotal) * 100,
+      0,
+    ),
     100,
   );
 
@@ -18,23 +22,25 @@ export default function ProgressBar({
     <div className="w-full">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#716873]">
-            Financial assessment
+          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#716873]">
+            Assessment progress
           </p>
 
-          <p className="mt-1 text-sm font-medium text-[#A59AA4]">
-            Building your borrower profile
+          <p className="mt-1 text-xs text-[#514A51]">
+            Your answers stay in this session.
           </p>
         </div>
 
-        <p className="fintech-number text-sm font-semibold text-[#D5A9CA]">
-          {String(current).padStart(2, "0")} /{" "}
-          {String(total).padStart(2, "0")}
+        <p className="fintech-number text-xs font-semibold text-[#C99DBE]">
+          {current}{" "}
+          <span className="text-[#5F5760]">
+            / {total}
+          </span>
         </p>
       </div>
 
       <div
-        className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+        className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]"
         aria-label="Assessment progress"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -42,13 +48,11 @@ export default function ProgressBar({
         role="progressbar"
       >
         <div
-          className="relative h-full rounded-full bg-gradient-to-r from-[#54294D] via-[#8A4D7B] to-[#B77BA8] transition-all duration-500 ease-out"
+          className="h-full rounded-full bg-gradient-to-r from-[#6D3B63] via-[#8A4D7B] to-[#B77BA8] transition-all duration-300 ease-out"
           style={{
             width: `${progress}%`,
           }}
-        >
-          <div className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white shadow-[0_0_14px_rgba(255,255,255,0.7)]" />
-        </div>
+        />
       </div>
     </div>
   );

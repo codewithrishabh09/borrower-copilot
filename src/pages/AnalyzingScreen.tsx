@@ -1,8 +1,10 @@
 import {
   BrainCircuit,
   CheckCircle2,
+  CircleDollarSign,
   LoaderCircle,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -16,187 +18,289 @@ interface AnalyzingScreenProps {
 const analysisSteps = [
   {
     label: "Processing your financial information",
+    description:
+      "Structuring your borrower profile",
     icon: BrainCircuit,
   },
   {
     label: "Calculating borrowing affordability",
-    icon: TrendingUp,
+    description:
+      "Estimating your safe EMI and borrowing capacity",
+    icon: CircleDollarSign,
   },
   {
     label: "Running income stress tests",
-    icon: ShieldCheck,
+    description:
+      "Checking repayment pressure and resilience",
+    icon: TrendingUp,
   },
   {
     label: "Generating personalized recommendations",
-    icon: CheckCircle2,
+    description:
+      "Building your final borrowing position",
+    icon: ShieldCheck,
   },
 ];
 
 export default function AnalyzingScreen({
   onComplete,
 }: AnalyzingScreenProps) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] =
+    useState(0);
 
   useEffect(() => {
-    if (currentStep >= analysisSteps.length) {
-      const completeTimer = window.setTimeout(
-        onComplete,
-        500,
-      );
+    if (
+      currentStep >=
+      analysisSteps.length
+    ) {
+      const completeTimer =
+        window.setTimeout(
+          onComplete,
+          500,
+        );
 
-      return () => window.clearTimeout(completeTimer);
+      return () =>
+        window.clearTimeout(
+          completeTimer,
+        );
     }
 
-    const timer = window.setTimeout(() => {
-      setCurrentStep(
-        (previousStep) => previousStep + 1,
-      );
-    }, 900);
+    const timer =
+      window.setTimeout(() => {
+        setCurrentStep(
+          (previousStep) =>
+            previousStep + 1,
+        );
+      }, 900);
 
-    return () => window.clearTimeout(timer);
+    return () =>
+      window.clearTimeout(timer);
   }, [currentStep, onComplete]);
 
+  const progress = Math.min(
+    Math.round(
+      (currentStep /
+        analysisSteps.length) *
+        100,
+    ),
+    100,
+  );
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#FAF9F8] px-6 py-10 text-[#211A1E]">
-      <section className="w-full max-w-xl">
-        {/* Brand */}
-        <div className="mb-10 flex items-center justify-center gap-3">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08070A] px-5 py-10 text-[#F5F1F4] sm:px-8">
+      {/* =========================================
+          AMBIENT BACKGROUND
+      ========================================== */}
+
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#6D3B63]/10 blur-[130px]" />
+
+      <div className="pointer-events-none absolute -right-48 -top-48 h-[420px] w-[420px] rounded-full bg-[#8A4D7B]/10 blur-[120px]" />
+
+      {/* =========================================
+          MAIN CONTENT
+      ========================================== */}
+
+      <section className="relative w-full max-w-2xl">
+        {/* =========================================
+            BRAND
+        ========================================== */}
+
+        <div className="mb-8 flex items-center justify-center gap-3">
           <Logo size={44} />
 
           <div>
-            <h1 className="font-semibold">
+            <p className="text-sm font-semibold tracking-tight">
               Borrower Copilot
-            </h1>
+            </p>
 
-            <p className="text-xs text-[#756A70]">
-              Preparing your assessment
+            <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#716873]">
+              Financial intelligence
             </p>
           </div>
         </div>
 
-        {/* Main Card */}
-        <div className="rounded-3xl border border-[#E6DFE2] bg-white p-7 shadow-sm sm:p-10">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3EEF1] text-[#643652]">
+        {/* =========================================
+            MAIN CARD
+        ========================================== */}
+
+        <div className="overflow-hidden rounded-[30px] border border-white/[0.08] bg-gradient-to-br from-[#151016] via-[#0F0C11] to-[#0A090C] p-6 shadow-[0_35px_100px_rgba(0,0,0,0.45)] sm:p-9">
+          {/* Header */}
+          <div className="flex items-start gap-4">
+            {/* Animated loader */}
+            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#A66A96]/20 bg-[#6D3B63]/10 text-[#C99DBE]">
               <LoaderCircle
-                size={24}
+                size={23}
                 className="animate-spin"
               />
+
+              <span className="absolute inset-0 rounded-2xl bg-[#A66A96]/5" />
             </div>
 
-            <div>
-              <p className="text-sm font-semibold text-[#643652]">
-                ANALYZING
-              </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#A66A96]">
+                  Analyzing
+                </p>
 
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+                <Sparkles
+                  size={13}
+                  className="text-[#D5A9CA]"
+                />
+              </div>
+
+              <h1 className="mt-1 text-2xl font-semibold tracking-[-0.035em] text-[#F5F1F4] sm:text-3xl">
                 Building your borrowing assessment
-              </h2>
+              </h1>
             </div>
           </div>
 
-          <p className="mt-6 text-sm leading-7 text-[#756A70]">
+          {/* Description */}
+          <p className="mt-6 max-w-xl text-sm leading-7 text-[#817783]">
             We are evaluating affordability, borrowing
-            costs, and potential financial pressure based
-            on the information you provided.
+            costs, repayment pressure, and financial
+            resilience based on the information you
+            provided.
           </p>
 
-          {/* Progress */}
-          <div className="mt-8">
-            <div className="mb-3 flex items-center justify-between text-xs text-[#756A70]">
-              <span>Analysis progress</span>
+          {/* =========================================
+              PROGRESS
+          ========================================== */}
 
-              <span>
-                {Math.min(
-                  Math.round(
-                    (currentStep /
-                      analysisSteps.length) *
-                      100,
-                  ),
-                  100,
-                )}
-                %
+          <div className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#716873]">
+                Analysis progress
+              </span>
+
+              <span className="fintech-number text-xs font-semibold text-[#C99DBE]">
+                {progress}%
               </span>
             </div>
 
-            <div className="h-2 overflow-hidden rounded-full bg-[#EEE8EB]">
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
               <div
-                className="h-full rounded-full bg-[#4B2440] transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-[#6D3B63] via-[#8A4D7B] to-[#B77BA8] transition-all duration-500 ease-out"
                 style={{
-                  width: `${Math.min(
-                    (currentStep /
-                      analysisSteps.length) *
-                      100,
-                    100,
-                  )}%`,
+                  width: `${progress}%`,
                 }}
               />
             </div>
           </div>
 
-          {/* Steps */}
-          <div className="mt-8 space-y-4">
-            {analysisSteps.map((step, index) => {
-              const StepIcon = step.icon;
+          {/* =========================================
+              ANALYSIS STEPS
+          ========================================== */}
 
-              const isCompleted =
-                index < currentStep;
+          <div className="mt-8 space-y-3">
+            {analysisSteps.map(
+              (step, index) => {
+                const StepIcon =
+                  step.icon;
 
-              const isCurrent =
-                index === currentStep;
+                const isCompleted =
+                  index < currentStep;
 
-              return (
-                <div
-                  key={step.label}
-                  className={`flex items-center gap-4 rounded-xl border p-4 transition ${
-                    isCurrent
-                      ? "border-[#D8C8D0] bg-[#FAF6F8]"
-                      : "border-[#EAE4E6] bg-white"
-                  }`}
-                >
+                const isCurrent =
+                  index === currentStep;
+
+                return (
                   <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                      isCompleted
-                        ? "bg-emerald-50 text-emerald-600"
-                        : isCurrent
-                          ? "bg-[#4B2440] text-white"
-                          : "bg-[#F3EEF1] text-[#9A8C92]"
+                    key={step.label}
+                    className={`flex items-center gap-4 rounded-2xl border p-4 transition-all duration-300 ${
+                      isCurrent
+                        ? "border-[#A66A96]/20 bg-[#6D3B63]/[0.08]"
+                        : isCompleted
+                          ? "border-[#39D39F]/10 bg-[#39D39F]/[0.025]"
+                          : "border-white/[0.06] bg-white/[0.02]"
                     }`}
                   >
-                    {isCompleted ? (
-                      <CheckCircle2 size={18} />
-                    ) : (
-                      <StepIcon
-                        size={18}
-                        className={
+                    {/* Icon */}
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                        isCompleted
+                          ? "bg-[#39D39F]/10 text-[#39D39F]"
+                          : isCurrent
+                            ? "bg-[#6D3B63]/20 text-[#D5A9CA]"
+                            : "bg-white/[0.04] text-[#5F5760]"
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2
+                          size={18}
+                        />
+                      ) : (
+                        <StepIcon
+                          size={18}
+                          className={
+                            isCurrent
+                              ? "animate-pulse"
+                              : ""
+                          }
+                        />
+                      )}
+                    </div>
+
+                    {/* Text */}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-sm font-semibold ${
+                          isCompleted
+                            ? "text-[#B8DCCF]"
+                            : isCurrent
+                              ? "text-[#E5DEE3]"
+                              : "text-[#5F5760]"
+                        }`}
+                      >
+                        {step.label}
+                      </p>
+
+                      <p
+                        className={`mt-1 text-xs leading-5 ${
                           isCurrent
-                            ? "animate-pulse"
-                            : ""
-                        }
-                      />
+                            ? "text-[#817783]"
+                            : isCompleted
+                              ? "text-[#5F776D]"
+                              : "text-[#514A51]"
+                        }`}
+                      >
+                        {step.description}
+                      </p>
+                    </div>
+
+                    {/* Status */}
+                    {isCurrent && (
+                      <span className="hidden shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[#A66A96] sm:block">
+                        Running
+                      </span>
+                    )}
+
+                    {isCompleted && (
+                      <span className="hidden shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[#39D39F] sm:block">
+                        Done
+                      </span>
                     )}
                   </div>
-
-                  <p
-                    className={`text-sm ${
-                      isCompleted
-                        ? "font-medium text-[#40383C]"
-                        : isCurrent
-                          ? "font-semibold text-[#211A1E]"
-                          : "text-[#9A8C92]"
-                    }`}
-                  >
-                    {step.label}
-                  </p>
-                </div>
-              );
-            })}
+                );
+              },
+            )}
           </div>
 
-          <p className="mt-8 text-center text-xs leading-5 text-[#84777E]">
-            This assessment is generated from the financial
-            information provided during this session.
-          </p>
+          {/* =========================================
+              PRIVACY / TRUST FOOTER
+          ========================================== */}
+
+          <div className="mt-7 flex items-center justify-center gap-2 border-t border-white/[0.06] pt-6 text-center text-[10px] leading-5 text-[#5F5760]">
+            <ShieldCheck
+              size={13}
+              className="shrink-0 text-[#39D39F]"
+            />
+
+            <span>
+              This assessment is generated from the
+              financial information provided during
+              this session.
+            </span>
+          </div>
         </div>
       </section>
     </main>
