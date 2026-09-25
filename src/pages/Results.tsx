@@ -1,24 +1,28 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowUpRight,
   CheckCircle2,
+  ChevronRight,
+  CircleDollarSign,
   Gem,
+  Gauge,
   ShieldAlert,
   TrendingDown,
+  Wallet,
 } from "lucide-react";
-
 import type { ReactNode } from "react";
 
 import type { BorrowerAnalysisResult } from "../engine/borrowerAnalyzer";
-
 import {
   generateRecommendations,
   type BorrowerRecommendation,
 } from "../engine/recommendationEngine";
 
-import PlanComparison from "../components/PlanComparison";
-
 import AssessmentSummary from "../components/AssessmentSummary";
+import NegotiationCard from "../components/NegotiationCard";
+import PlanComparison from "../components/PlanComparison";
+import Logo from "../components/Logo";
 
 interface ResultsProps {
   analysis: BorrowerAnalysisResult;
@@ -34,76 +38,40 @@ function formatCurrency(value: number) {
 }
 
 function getRecommendationConfig(
-  recommendation:
-    | "BORROW"
-    | "BORROW_LESS"
-    | "DO_NOT_BORROW",
+  recommendation: BorrowerAnalysisResult["decision"]["recommendation"],
 ) {
   switch (recommendation) {
     case "BORROW":
       return {
-        title: "You can consider borrowing",
         label: "BORROW",
+        title:
+          "Your request fits the assessed affordability range.",
         description:
-          "Based on the information provided, the requested borrowing amount appears to be within the calculated affordability limits.",
+          "The requested amount and EMI are within the calculated limits for the information provided.",
         icon: CheckCircle2,
-        color: "text-emerald-700",
-        background: "bg-emerald-50",
-        border: "border-emerald-200",
+        accent: "#39D39F",
       };
 
     case "BORROW_LESS":
       return {
-        title: "Consider borrowing less",
         label: "BORROW LESS",
+        title:
+          "A smaller borrowing amount looks more manageable.",
         description:
-          "Your requested amount may place additional pressure on your monthly finances. A lower amount appears more manageable.",
+          "The current request creates additional pressure against the calculated affordability or risk limits.",
         icon: TrendingDown,
-        color: "text-amber-700",
-        background: "bg-amber-50",
-        border: "border-amber-200",
+        accent: "#E7A84B",
       };
 
     case "DO_NOT_BORROW":
       return {
-        title: "Borrowing may not be safe right now",
         label: "DO NOT BORROW",
+        title:
+          "The current request may create significant repayment pressure.",
         description:
-          "Based on the affordability and risk checks, taking on this additional debt could place significant pressure on your finances.",
+          "The assessment found affordability or risk signals that make additional borrowing less manageable right now.",
         icon: ShieldAlert,
-        color: "text-red-700",
-        background: "bg-red-50",
-        border: "border-red-200",
-      };
-  }
-}
-
-function getGoldLimitingFactorMessage(
-  limitingFactor:
-    | "gold_value"
-    | "monthly_affordability"
-    | "both",
-) {
-  switch (limitingFactor) {
-    case "gold_value":
-      return {
-        title: "Your gold value is the main limit",
-        description:
-          "Your estimated gold value currently places a lower limit on the amount you can safely borrow.",
-      };
-
-    case "monthly_affordability":
-      return {
-        title: "Your monthly affordability is the main limit",
-        description:
-          "Your repayment capacity places a lower limit on the amount you can safely borrow than the value of your gold.",
-      };
-
-    case "both":
-      return {
-        title: "Both factors are equally limiting",
-        description:
-          "Your gold-backed borrowing limit and monthly affordability limit are currently at approximately the same level.",
+        accent: "#E66A78",
       };
   }
 }
@@ -112,721 +80,873 @@ export default function Results({
   analysis,
   onStartAgain,
 }: ResultsProps) {
-  const recommendationConfig = getRecommendationConfig(
+  const recommendation = getRecommendationConfig(
     analysis.decision.recommendation,
   );
 
-  const RecommendationIcon = recommendationConfig.icon;
+  const RecommendationIcon = recommendation.icon;
 
-  const recommendationResult =
+  const recommendations =
     generateRecommendations(analysis);
 
-  const goldLoan = analysis.goldLoan;
+  const isGoldLoan =
+    analysis.profile.loanPurpose === "gold";
 
-  const goldLimitMessage = goldLoan
-    ? getGoldLimitingFactorMessage(
-        goldLoan.limitingFactor,
-      )
-    : null;
+  const safeAmount =
+    analysis.affordableLoanAmount;
+
+  const requestedAmount =
+    analysis.requestedLoan.amount;
+
+  const capacityPercent =
+    requestedAmount > 0
+      ? Math.min(
+          Math.round(
+            (safeAmount / requestedAmount) * 100,
+          ),
+          100,
+        )
+      : 0;
 
   return (
-    <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
-      <div className="mx-auto max-w-6xl px-6 py-8 sm:px-10">
+    <main className="fintech-shell min-h-screen bg-[#08070A] text-[#F5F1F4]">
+      <div className="mx-auto max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
+        {/* =====================================
+            HEADER
+        ====================================== */}
 
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
+        <header className="sticky top-4 z-20 mb-8 flex items-center justify-between rounded-2xl border border-white/[0.08] bg-[#0D0A0F]/85 px-4 py-3 shadow-[0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:px-5">
           <div className="flex items-center gap-3">
-
-            {/* Logo */}
-            <img
-              src="/borrower-copilot-logo.png"
-              alt="Borrower Copilot"
-              className="h-10 w-10 rounded-xl object-contain"
-            />
+            <Logo size={40} />
 
             <div>
-              <h1 className="font-semibold">
+              <p className="text-sm font-semibold tracking-tight">
                 Borrower Copilot
-              </h1>
+              </p>
 
-              <p className="text-xs text-[#756A70]">
-                Your borrowing assessment
+              <p className="text-[10px] uppercase tracking-[0.14em] text-[#716873]">
+                Financial intelligence
               </p>
             </div>
           </div>
 
-          {/* Mobile back button */}
-            <button
-              type="button"
-              onClick={onStartAgain}
-              className="inline-flex sm:hidden items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-[#756A70] transition hover:bg-[#F1ECEE] min-h-[44px]"
-            >
-              <ArrowLeft size={16} />
-              Back
-            </button>
+          <button
+            type="button"
+            onClick={onStartAgain}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-[#A59AA4] transition hover:border-[#A66A96]/30 hover:bg-white/[0.06] hover:text-white"
+          >
+            <ArrowLeft size={16} />
 
-            {/* Desktop start again button */}
-            <button
-              type="button"
-              onClick={onStartAgain}
-              className="hidden sm:inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE]"
-            >
-              <ArrowLeft size={17} />
+            <span className="hidden sm:inline">
               Start again
-            </button>
+            </span>
+          </button>
         </header>
 
-        {/* Recommendation Hero */}
-        <section
-          className={`mt-10 rounded-3xl border p-8 sm:p-10 ${recommendationConfig.background} ${recommendationConfig.border}`}
-        >
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div
-                className={`mb-5 inline-flex items-center gap-2 rounded-full border border-current px-3 py-1 text-xs font-bold tracking-[0.12em] ${recommendationConfig.color}`}
-              >
-                <RecommendationIcon size={15} />
+        {/* =====================================
+            RECOMMENDATION HERO
+        ====================================== */}
 
-                {recommendationConfig.label}
+        <section className="fintech-glow relative overflow-hidden rounded-[30px] border border-white/[0.08] bg-gradient-to-br from-[#17111A] via-[#100D12] to-[#0B090D] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.35)] sm:p-9 lg:p-11">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_25%,rgba(166,106,150,0.13),transparent_30%),radial-gradient(circle_at_20%_100%,rgba(109,59,99,0.12),transparent_35%)]" />
+
+          <div className="relative grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+            <div>
+              <div className="mb-5 flex flex-wrap items-center gap-3">
+                <span
+                  className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-[0.16em]"
+                  style={{
+                    borderColor: `${recommendation.accent}55`,
+                    color: recommendation.accent,
+                    background: `${recommendation.accent}10`,
+                  }}
+                >
+                  <RecommendationIcon size={14} />
+
+                  {recommendation.label}
+                </span>
+
+                <span className="rounded-full border border-white/[0.08] px-3 py-1.5 text-[10px] font-semibold tracking-[0.14em] text-[#716873]">
+                  ASSESSMENT COMPLETE
+                </span>
               </div>
 
-              <h2 className="max-w-2xl text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">
-                {recommendationConfig.title}
-              </h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#716873]">
+                Your borrowing position
+              </p>
 
-              <p className="mt-4 max-w-2xl leading-7 text-[#756A70]">
-                {recommendationConfig.description}
+              <h1 className="mt-3 max-w-3xl text-3xl font-semibold leading-[1.04] tracking-[-0.045em] sm:text-5xl lg:text-6xl">
+                {recommendation.title}
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-[#A59AA4] sm:text-base">
+                {recommendation.description}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white/70 px-5 py-4 text-left sm:text-right">
-              <p className="text-xs font-medium uppercase tracking-wide text-[#756A70]">
-                Confidence
-              </p>
+            {/* Confidence */}
+            <div className="rounded-3xl border border-white/[0.08] bg-black/20 p-6 backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-[0.14em] text-[#716873]">
+                  Confidence
+                </p>
 
-              <p className="mt-1 text-3xl font-semibold">
-                {analysis.decision.confidenceScore}%
-              </p>
+                <Gauge
+                  size={18}
+                  className="text-[#A66A96]"
+                />
+              </div>
+
+              <div className="mt-3 flex items-end justify-between gap-4">
+                <p className="fintech-number text-5xl font-semibold">
+                  {analysis.decision.confidenceScore}%
+                </p>
+
+                <span className="mb-1 text-xs font-semibold text-[#39D39F]">
+                  {analysis.decision.riskLevel} RISK
+                </span>
+              </div>
+
+              <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#6D3B63] to-[#B77BA8] transition-all"
+                  style={{
+                    width: `${analysis.decision.confidenceScore}%`,
+                  }}
+                />
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Main Metrics */}
-        <section className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {/* =====================================
+            TOP METRICS
+        ====================================== */}
 
+        <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
-            label="Requested amount"
-            value={formatCurrency(
-              analysis.requestedLoan.amount,
-            )}
-            description="Amount you want to borrow"
+            icon={<CircleDollarSign size={18} />}
+            label="Safe borrowing capacity"
+            value={formatCurrency(safeAmount)}
+            description="Calculated conservative limit"
+            featured
           />
 
           <MetricCard
-            label={
-              goldLoan
-                ? "Your gold-backed safe amount"
-                : "Your safe amount"
-            }
-            value={formatCurrency(
-              analysis.affordableLoanAmount,
-            )}
-            description={
-              goldLoan
-                ? "Based on both affordability and estimated gold value"
-                : "Conservative amount based on affordability"
-            }
-            highlight
-          />
-
-          <MetricCard
-            label="Likely lender sanction"
-            value={formatCurrency(
-              analysis.eligibility.likelySanctionAmount,
-            )}
-            description="Estimated lender-side eligibility"
-          />
-
-          <MetricCard
+            icon={<Wallet size={18} />}
             label="Safe monthly EMI"
             value={formatCurrency(
               analysis.affordability.safeMonthlyEmi,
             )}
-            description="Maximum recommended new EMI"
+            description="Maximum assessed new EMI"
           />
 
           <MetricCard
-            label="Fair interest rate"
-            value={`${analysis.interestRate.fairRateMin}% – ${analysis.interestRate.fairRateMax}%`}
-            description="Estimated rate range based on your profile"
+            icon={<TrendingDown size={18} />}
+            label="Fair interest range"
+            value={`${analysis.interestRate.fairRateMin}%–${analysis.interestRate.fairRateMax}%`}
+            description="Estimated profile-based range"
           />
 
           <MetricCard
+            icon={<ArrowUpRight size={18} />}
             label="Estimated APR"
             value={`${analysis.apr.estimatedApr}%`}
-            description="Includes estimated borrowing costs"
+            description="Effective borrowing cost"
           />
-
         </section>
 
-        {/* Gold Loan Snapshot */}
-        {goldLoan && goldLimitMessage && (
-          <section className="mt-8 overflow-hidden rounded-2xl border border-[#E5D7C7] bg-[#FFFCF6]">
+        {/* =====================================
+            CAPACITY + REPAYMENT
+        ====================================== */}
 
-            <div className="border-b border-[#EDE2D4] bg-[#FFF8EC] px-6 py-5 sm:px-7">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <section className="mt-5 grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="fintech-card rounded-[26px] p-6 sm:p-7">
+            <SectionEyebrow>
+              Borrowing capacity
+            </SectionEyebrow>
 
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#F3E3C2] text-[#8A5A13]">
-                    <Gem size={21} />
-                  </div>
+            <div className="mt-3 flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="fintech-number text-4xl font-semibold sm:text-5xl">
+                  {formatCurrency(safeAmount)}
+                </p>
 
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-[#E5C98C] bg-[#FFF5DC] px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-[#8A5A13]">
-                        GOLD LOAN
-                      </span>
-                    </div>
+                <p className="mt-2 text-sm text-[#817783]">
+                  Safe amount compared with your requested
+                  borrowing.
+                </p>
+              </div>
 
-                    <h3 className="mt-2 text-xl font-semibold">
-                      Gold Loan Snapshot
-                    </h3>
+              <div className="min-w-[190px]">
+                <div className="mb-2 flex justify-between text-[10px] font-semibold uppercase tracking-[0.12em] text-[#716873]">
+                  <span>Capacity used</span>
 
-                    <p className="mt-1 text-sm leading-6 text-[#756A70]">
-                      Your safe borrowing amount is checked against both your repayment capacity and the estimated value of your gold.
-                    </p>
-                  </div>
+                  <span>{capacityPercent}%</span>
                 </div>
 
-                <div className="rounded-xl border border-[#E7D6BC] bg-white px-4 py-3 sm:text-right">
-                  <p className="text-xs font-medium text-[#756A70]">
-                    Final safe amount
-                  </p>
-
-                  <p className="mt-1 text-xl font-semibold text-[#4B2440]">
-                    {formatCurrency(
-                      goldLoan.finalSafeAmount,
-                    )}
-                  </p>
+                <div className="h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#6D3B63] via-[#8A4D7B] to-[#B77BA8]"
+                    style={{
+                      width: `${capacityPercent}%`,
+                    }}
+                  />
                 </div>
-
               </div>
             </div>
 
-            <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4 sm:p-7">
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <MiniStat
+                label="Requested"
+                value={formatCurrency(requestedAmount)}
+              />
 
-              <GoldMetric
+              <MiniStat
+                label="Recommended"
+                value={formatCurrency(
+                  analysis.decision
+                    .recommendedLoanAmount,
+                )}
+              />
+
+              <MiniStat
+                label="Lender estimate"
+                value={formatCurrency(
+                  analysis.eligibility
+                    .likelySanctionAmount,
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="fintech-card rounded-[26px] p-6 sm:p-7">
+            <SectionEyebrow>
+              Repayment profile
+            </SectionEyebrow>
+
+            <div className="mt-5 space-y-4">
+              <InfoRow
+                label="Requested EMI"
+                value={formatCurrency(
+                  analysis.requestedLoan.monthlyEmi,
+                )}
+              />
+
+              <InfoRow
+                label="Safe EMI"
+                value={formatCurrency(
+                  analysis.affordability
+                    .safeMonthlyEmi,
+                )}
+                highlight
+              />
+
+              <InfoRow
+                label="Disposable income"
+                value={formatCurrency(
+                  analysis.affordability
+                    .disposableIncome,
+                )}
+              />
+
+              <InfoRow
+                label="Existing EMI"
+                value={formatCurrency(
+                  analysis.affordability
+                    .existingEmi,
+                )}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* =====================================
+            GOLD LOAN
+        ====================================== */}
+
+        {isGoldLoan && analysis.goldLoan && (
+          <section className="mt-5 overflow-hidden rounded-[26px] border border-[#B9914A]/20 bg-gradient-to-br from-[#18120B] via-[#110D09] to-[#0B0907] p-6 sm:p-7">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#B9914A]/20 bg-[#B9914A]/10 text-[#D9AE60]">
+                  <Gem size={20} />
+                </div>
+
+                <div>
+                  <SectionEyebrow>
+                    Gold loan intelligence
+                  </SectionEyebrow>
+
+                  <h2 className="mt-2 text-xl font-semibold">
+                    Value-backed borrowing snapshot
+                  </h2>
+
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9F9284]">
+                    The assessed safe amount is constrained
+                    by both monthly affordability and the
+                    conservative value-based gold limit.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#B9914A]/20 bg-[#B9914A]/[0.06] px-5 py-4">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-[#9F9284]">
+                  Final safe amount
+                </p>
+
+                <p className="fintech-number mt-1 text-2xl font-semibold text-[#E2BF7A]">
+                  {formatCurrency(
+                    analysis.goldLoan.finalSafeAmount,
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <MiniStat
+                dark
                 label="Estimated gold value"
                 value={formatCurrency(
-                  goldLoan.estimatedGoldValue,
+                  analysis.goldLoan
+                    .estimatedGoldValue,
                 )}
-                description="Estimated value you provided"
               />
 
-              <GoldMetric
-                label="Conservative LTV"
-                value={`${goldLoan.conservativeLtvPercentage}%`}
-                description="Internal assessment limit"
-              />
-
-              <GoldMetric
-                label="Gold-backed limit"
+              <MiniStat
+                dark
+                label="70% conservative limit"
                 value={formatCurrency(
-                  goldLoan.maxLoanByGoldValue,
+                  analysis.goldLoan
+                    .maxLoanByGoldValue,
                 )}
-                description="Maximum based on estimated gold value"
               />
 
-              <GoldMetric
-                label="Affordability limit"
-                value={formatCurrency(
-                  goldLoan.affordabilityBasedLoanAmount,
+              <MiniStat
+                dark
+                label="Limiting factor"
+                value={analysis.goldLoan.limitingFactor.replace(
+                  "_",
+                  " ",
                 )}
-                description="Maximum based on monthly repayment capacity"
               />
-
             </div>
-
-            <div className="mx-6 mb-6 rounded-xl border border-[#E9DDD1] bg-white p-5 sm:mx-7 sm:mb-7">
-
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#756A70]">
-                Primary limiting factor
-              </p>
-
-              <h4 className="mt-2 text-base font-semibold">
-                {goldLimitMessage.title}
-              </h4>
-
-              <p className="mt-2 text-sm leading-6 text-[#756A70]">
-                {goldLimitMessage.description}
-              </p>
-
-            </div>
-
           </section>
         )}
 
-        {/* Main Content */}
-        <section className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        {/* =====================================
+            PLAN COMPARISON
+        ====================================== */}
 
-          {/* Left Column */}
-          <div className="space-y-8">
-
-            <ResultCard title="Why this recommendation">
-              <div className="space-y-4">
-
-                {analysis.decision.reasons.map(
-                  (reason) => (
-                    <div
-                      key={reason}
-                      className="flex gap-3"
-                    >
-                      <CheckCircle2
-                        size={19}
-                        className="mt-0.5 shrink-0 text-emerald-600"
-                      />
-
-                      <p className="text-sm leading-6 text-[#756A70]">
-                        {reason}
-                      </p>
-                    </div>
-                  ),
-                )}
-
-                {analysis.decision.warnings.map(
-                  (warning) => (
-                    <div
-                      key={warning}
-                      className="flex gap-3"
-                    >
-                      <AlertTriangle
-                        size={19}
-                        className="mt-0.5 shrink-0 text-amber-600"
-                      />
-
-                      <p className="text-sm leading-6 text-[#756A70]">
-                        {warning}
-                      </p>
-                    </div>
-                  ),
-                )}
-
-              </div>
-            </ResultCard>
-
-            <ResultCard title="What you can do next">
-              <p className="mb-6 text-sm leading-6 text-[#756A70]">
-                These recommendations are based on your
-                income, affordability limits, borrowing
-                costs, and stress test results.
-              </p>
-
-              <div className="space-y-4">
-                {recommendationResult.recommendations.map(
-                  (recommendation) => (
-                    <ActionRecommendation
-                      key={recommendation.id}
-                      recommendation={recommendation}
-                    />
-                  ),
-                )}
-              </div>
-            </ResultCard>
-
-            <PlanComparison analysis={analysis} />
-
-            <ResultCard title="Income stress test">
-              <p className="mb-6 text-sm leading-6 text-[#756A70]">
-                This shows how the proposed EMI performs
-                if your income decreases.
-              </p>
-
-              <div className="space-y-3">
-                {analysis.stressTest.scenarios.map(
-                  (scenario) => (
-                    <div
-                      key={scenario.incomeDropPercentage}
-                      className="flex items-center justify-between rounded-xl border border-[#EAE4E6] p-4"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          Income drops{" "}
-                          {scenario.incomeDropPercentage}%
-                        </p>
-
-                        <p className="mt-1 text-xs text-[#756A70]">
-                          Stressed income:{" "}
-                          {formatCurrency(
-                            scenario.stressedIncome,
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p
-                          className={`text-sm font-semibold ${
-                            scenario.isAffordable
-                              ? "text-emerald-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {scenario.isAffordable
-                            ? "Affordable"
-                            : "Not safe"}
-                        </p>
-
-                        <p className="mt-1 text-xs text-[#756A70]">
-                          EMI ratio:{" "}
-                          {scenario.emiToIncomeRatio}%
-                        </p>
-                      </div>
-                    </div>
-                  ),
-                )}
-              </div>
-            </ResultCard>
-
-          </div>
-
-          {/* Right Column */}
-          <div className="space-y-8">
-
-            <ResultCard title="Borrowing cost">
-              <div className="space-y-5">
-
-                <CostRow
-                  label="Monthly EMI"
-                  value={formatCurrency(
-                    analysis.requestedLoan.monthlyEmi,
-                  )}
-                />
-
-                <CostRow
-                  label="Estimated APR"
-                  value={`${analysis.apr.estimatedApr}%`}
-                />
-
-                <CostRow
-                  label="Processing fee"
-                  value={formatCurrency(
-                    analysis.apr.processingFee,
-                  )}
-                />
-
-                <CostRow
-                  label="Total interest"
-                  value={formatCurrency(
-                    analysis.apr.totalInterest,
-                  )}
-                />
-
-                <CostRow
-                  label="Net amount received"
-                  value={formatCurrency(
-                    analysis.apr.netDisbursedAmount,
-                  )}
-                  strong
-                />
-
-              </div>
-            </ResultCard>
-
-            <ResultCard title="Financial snapshot">
-              <div className="space-y-5">
-
-                <CostRow
-                  label="Usable monthly income"
-                  value={formatCurrency(
-                    analysis.income.usableMonthlyIncome,
-                  )}
-                />
-
-                <CostRow
-                  label="Monthly expenses"
-                  value={formatCurrency(
-                    analysis.affordability.monthlyExpenses,
-                  )}
-                />
-
-                <CostRow
-                  label="Existing EMI"
-                  value={formatCurrency(
-                    analysis.affordability.existingEmi,
-                  )}
-                />
-
-                <CostRow
-                  label="Disposable income"
-                  value={formatCurrency(
-                    analysis.affordability.disposableIncome,
-                  )}
-                  strong
-                />
-
-              </div>
-            </ResultCard>
-
-            <AssessmentSummary analysis={analysis} />
-
-            <ResultCard title="Negotiation guidance">
-              <div className="space-y-5">
-
-                <div>
-                  <h4 className="text-base font-semibold text-[#211A1E]">
-                    {analysis.negotiation.headline}
-                  </h4>
-
-                  <p className="mt-2 text-sm leading-6 text-[#756A70]">
-                    {analysis.negotiation.summary}
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-
-                  {analysis.negotiation.suggestions.map(
-                    (suggestion) => (
-                      <div
-                        key={suggestion.title}
-                        className="rounded-xl border border-[#EAE4E6] bg-[#FAF9F8] p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-
-                          <div>
-                            <h5 className="text-sm font-semibold text-[#211A1E]">
-                              {suggestion.title}
-                            </h5>
-
-                            <p className="mt-1.5 text-sm leading-6 text-[#756A70]">
-                              {suggestion.description}
-                            </p>
-                          </div>
-
-                          <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide ${
-                              suggestion.priority === "HIGH"
-                                ? "bg-red-50 text-red-700"
-                                : suggestion.priority === "MEDIUM"
-                                  ? "bg-amber-50 text-amber-700"
-                                  : "bg-[#F1ECEE] text-[#643652]"
-                            }`}
-                          >
-                            {suggestion.priority}
-                          </span>
-
-                        </div>
-                      </div>
-                    ),
-                  )}
-
-                </div>
-              </div>
-            </ResultCard>
-
-          </div>
-
+        <section className="mt-5">
+          <PlanComparison analysis={analysis} />
         </section>
 
-        {/* Mobile Start Again */}
-        <button
-          type="button"
-          onClick={onStartAgain}
-          className="mt-10 w-full rounded-xl bg-[#4B2440] px-5 py-4 text-sm font-semibold text-white sm:hidden"
-        >
-          Start new assessment
-        </button>
+        {/* =====================================
+            STRESS + COST
+        ====================================== */}
 
+        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <StressTestCard analysis={analysis} />
+
+          <BorrowingCostCard analysis={analysis} />
+        </section>
+
+        {/* =====================================
+            DECISION + RECOMMENDATIONS
+        ====================================== */}
+
+        <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <WhyCard analysis={analysis} />
+
+          <RecommendationsCard
+            recommendations={
+              recommendations.recommendations
+            }
+          />
+        </section>
+
+        {/* =====================================
+            NEGOTIATION CARD
+        ====================================== */}
+
+        <section className="mt-5">
+          <NegotiationCard
+            analysis={analysis}
+            onStartAgain={onStartAgain}
+          />
+        </section>
+
+        {/* =====================================
+            SUMMARY
+        ====================================== */}
+
+        <section className="mt-5">
+          <AssessmentSummary analysis={analysis} />
+        </section>
+
+        <footer className="py-8 text-center text-xs leading-5 text-[#5F5760]">
+          Borrower Copilot is an educational financial
+          self-assessment, not a loan approval or financial
+          guarantee.
+        </footer>
       </div>
     </main>
   );
 }
 
-/* ---------------------------------
-   Reusable Components
----------------------------------- */
+/* =========================================
+   SECTION EYEBROW
+========================================= */
 
-interface MetricCardProps {
-  label: string;
-  value: string;
-  description: string;
-  highlight?: boolean;
+function SectionEyebrow({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#A66A96]">
+      {children}
+    </p>
+  );
 }
+
+/* =========================================
+   METRIC CARD
+========================================= */
 
 function MetricCard({
+  icon,
   label,
   value,
   description,
-  highlight = false,
-}: MetricCardProps) {
-  return (
-    <div
-      className={`rounded-2xl border p-6 ${
-        highlight
-          ? "border-[#4B2440] bg-[#F8F3F6]"
-          : "border-[#E6DFE2] bg-white"
-      }`}
-    >
-      <p className="text-sm font-medium text-[#756A70]">
-        {label}
-      </p>
-
-      <p className="mt-3 text-3xl font-semibold tracking-tight">
-        {value}
-      </p>
-
-      <p className="mt-2 text-xs text-[#84777E]">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-interface GoldMetricProps {
+  featured = false,
+}: {
+  icon: ReactNode;
   label: string;
   value: string;
   description: string;
-}
-
-function GoldMetric({
-  label,
-  value,
-  description,
-}: GoldMetricProps) {
+  featured?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-[#E9DED0] bg-white p-5">
-      <p className="text-xs font-medium text-[#756A70]">
+    <div
+      className={`fintech-card fintech-card-hover rounded-[22px] p-5 ${
+        featured
+          ? "border-[#8A4D7B]/30 bg-gradient-to-br from-[#19101A] to-[#100D12]"
+          : ""
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[#A66A96]">
+          {icon}
+        </span>
+
+        {featured && (
+          <span className="h-1.5 w-1.5 rounded-full bg-[#39D39F] shadow-[0_0_12px_rgba(57,211,159,0.7)]" />
+        )}
+      </div>
+
+      <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#716873]">
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-semibold text-[#211A1E]">
+      <p className="fintech-number mt-2 text-2xl font-semibold tracking-[-0.035em] sm:text-3xl">
         {value}
       </p>
 
-      <p className="mt-2 text-xs leading-5 text-[#84777E]">
+      <p className="mt-2 text-xs leading-5 text-[#817783]">
         {description}
       </p>
     </div>
   );
 }
 
-interface ResultCardProps {
-  title: string;
-  children: ReactNode;
-}
+/* =========================================
+   MINI STAT
+========================================= */
 
-function ResultCard({
-  title,
-  children,
-}: ResultCardProps) {
+function MiniStat({
+  label,
+  value,
+  dark = false,
+}: {
+  label: string;
+  value: string;
+  dark?: boolean;
+}) {
   return (
-    <section className="rounded-2xl border border-[#E6DFE2] bg-white p-6 sm:p-7">
+    <div
+      className={`rounded-2xl border p-4 ${
+        dark
+          ? "border-[#B9914A]/15 bg-white/[0.025]"
+          : "border-white/[0.07] bg-white/[0.025]"
+      }`}
+    >
+      <p
+        className={`text-[10px] uppercase tracking-[0.12em] ${
+          dark
+            ? "text-[#9F9284]"
+            : "text-[#716873]"
+        }`}
+      >
+        {label}
+      </p>
 
-      <h3 className="text-lg font-semibold">
-        {title}
-      </h3>
-
-      <div className="mt-6">
-        {children}
-      </div>
-
-    </section>
+      <p
+        className={`fintech-number mt-2 text-base font-semibold capitalize ${
+          dark
+            ? "text-[#D7C3A2]"
+            : "text-[#E5DEE3]"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 
-interface CostRowProps {
-  label: string;
-  value: string;
-  strong?: boolean;
-}
+/* =========================================
+   INFO ROW
+========================================= */
 
-function CostRow({
+function InfoRow({
   label,
   value,
-  strong = false,
-}: CostRowProps) {
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
   return (
-    <div className="flex items-center justify-between gap-4">
-
-      <span className="text-sm text-[#756A70]">
+    <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] pb-4 last:border-0 last:pb-0">
+      <span className="text-sm text-[#817783]">
         {label}
       </span>
 
       <span
-        className={`text-sm ${
-          strong
-            ? "font-semibold text-[#211A1E]"
-            : "font-medium text-[#40383C]"
+        className={`fintech-number text-sm font-semibold ${
+          highlight
+            ? "text-[#D5A9CA]"
+            : "text-[#E5DEE3]"
         }`}
       >
         {value}
       </span>
-
     </div>
   );
 }
 
-interface ActionRecommendationProps {
-  recommendation: BorrowerRecommendation;
-}
+/* =========================================
+   STRESS TEST
+========================================= */
 
-function ActionRecommendation({
-  recommendation,
-}: ActionRecommendationProps) {
-  const priorityConfig = {
-    high: {
-      label: "HIGH PRIORITY",
-      badge:
-        "bg-red-50 text-red-700 border-red-200",
-      dot: "bg-red-500",
-    },
-
-    medium: {
-      label: "MEDIUM PRIORITY",
-      badge:
-        "bg-amber-50 text-amber-700 border-amber-200",
-      dot: "bg-amber-500",
-    },
-
-    low: {
-      label: "TIP",
-      badge:
-        "bg-[#F3EEF1] text-[#643652] border-[#DED3D9]",
-      dot: "bg-[#643652]",
-    },
-  };
-
-  const config =
-    priorityConfig[recommendation.priority];
-
+function StressTestCard({
+  analysis,
+}: {
+  analysis: BorrowerAnalysisResult;
+}) {
   return (
-    <div className="rounded-xl border border-[#EAE4E6] p-5">
-      <div className="flex items-start gap-3">
+    <section className="fintech-card rounded-[26px] p-6 sm:p-7">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <SectionEyebrow>
+            Income resilience
+          </SectionEyebrow>
+
+          <h2 className="mt-2 text-xl font-semibold">
+            Stress test
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-[#817783]">
+            How the proposed EMI behaves when income falls.
+          </p>
+        </div>
 
         <span
-          className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${config.dot}`}
+          className={`rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-[0.1em] ${
+            analysis.stressTest.worstCaseAffordable
+              ? "border-[#39D39F]/20 bg-[#39D39F]/10 text-[#39D39F]"
+              : "border-[#E66A78]/20 bg-[#E66A78]/10 text-[#E66A78]"
+          }`}
+        >
+          {analysis.stressTest.worstCaseAffordable
+            ? "RESILIENT"
+            : "PRESSURE"}
+        </span>
+      </div>
+
+      <div className="mt-7 space-y-5">
+        {analysis.stressTest.scenarios.map(
+          (scenario) => {
+            const width = Math.min(
+              scenario.emiToIncomeRatio,
+              100,
+            );
+
+            return (
+              <div
+                key={
+                  scenario.incomeDropPercentage
+                }
+              >
+                <div className="mb-2 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#E5DEE3]">
+                      Income −
+                      {
+                        scenario.incomeDropPercentage
+                      }
+                      %
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-[#716873]">
+                      EMI ratio{" "}
+                      {scenario.emiToIncomeRatio}%
+                    </p>
+                  </div>
+
+                  <span
+                    className={`text-xs font-semibold ${
+                      scenario.isAffordable
+                        ? "text-[#39D39F]"
+                        : "text-[#E66A78]"
+                    }`}
+                  >
+                    {scenario.isAffordable
+                      ? "Within limit"
+                      : "Above limit"}
+                  </span>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                  <div
+                    className={`h-full rounded-full ${
+                      scenario.isAffordable
+                        ? "bg-gradient-to-r from-[#4C9E82] to-[#39D39F]"
+                        : "bg-gradient-to-r from-[#A34D5B] to-[#E66A78]"
+                    }`}
+                    style={{
+                      width: `${width}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          },
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* =========================================
+   BORROWING COST
+========================================= */
+
+function BorrowingCostCard({
+  analysis,
+}: {
+  analysis: BorrowerAnalysisResult;
+}) {
+  return (
+    <section className="fintech-card rounded-[26px] p-6 sm:p-7">
+      <SectionEyebrow>
+        Cost intelligence
+      </SectionEyebrow>
+
+      <h2 className="mt-2 text-xl font-semibold">
+        What the borrowing costs
+      </h2>
+
+      <div className="mt-7 space-y-5">
+        <InfoRow
+          label="Monthly EMI"
+          value={formatCurrency(
+            analysis.requestedLoan.monthlyEmi,
+          )}
+          highlight
         />
 
-        <div className="min-w-0 flex-1">
+        <InfoRow
+          label="Estimated APR"
+          value={`${analysis.apr.estimatedApr}%`}
+        />
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <InfoRow
+          label="Processing fee"
+          value={formatCurrency(
+            analysis.apr.processingFee,
+          )}
+        />
 
-            <h4 className="font-semibold text-[#211A1E]">
-              {recommendation.title}
-            </h4>
+        <InfoRow
+          label="Total interest"
+          value={formatCurrency(
+            analysis.apr.totalInterest,
+          )}
+        />
 
-            <span
-              className={`rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.1em] ${config.badge}`}
-            >
-              {config.label}
-            </span>
-
-          </div>
-
-          <p className="mt-3 text-sm leading-6 text-[#756A70]">
-            {recommendation.description}
-          </p>
-
-        </div>
+        <InfoRow
+          label="Net amount received"
+          value={formatCurrency(
+            analysis.apr.netDisbursedAmount,
+          )}
+          highlight
+        />
       </div>
-    </div>
+    </section>
+  );
+}
+
+/* =========================================
+   WHY RESULT
+========================================= */
+
+function WhyCard({
+  analysis,
+}: {
+  analysis: BorrowerAnalysisResult;
+}) {
+  return (
+    <section className="fintech-card rounded-[26px] p-6 sm:p-7">
+      <SectionEyebrow>
+        Decision signals
+      </SectionEyebrow>
+
+      <h2 className="mt-2 text-xl font-semibold">
+        Why this result
+      </h2>
+
+      <div className="mt-6 space-y-4">
+        {analysis.decision.reasons.map(
+          (reason) => (
+            <div
+              key={reason}
+              className="flex gap-3 rounded-2xl border border-[#39D39F]/10 bg-[#39D39F]/[0.035] p-4"
+            >
+              <CheckCircle2
+                size={18}
+                className="mt-0.5 shrink-0 text-[#39D39F]"
+              />
+
+              <p className="text-sm leading-6 text-[#A59AA4]">
+                {reason}
+              </p>
+            </div>
+          ),
+        )}
+
+        {analysis.decision.warnings.map(
+          (warning) => (
+            <div
+              key={warning}
+              className="flex gap-3 rounded-2xl border border-[#E7A84B]/10 bg-[#E7A84B]/[0.035] p-4"
+            >
+              <AlertTriangle
+                size={18}
+                className="mt-0.5 shrink-0 text-[#E7A84B]"
+              />
+
+              <p className="text-sm leading-6 text-[#A59AA4]">
+                {warning}
+              </p>
+            </div>
+          ),
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* =========================================
+   RECOMMENDATIONS
+========================================= */
+
+function RecommendationsCard({
+  recommendations,
+}: {
+  recommendations: BorrowerRecommendation[];
+}) {
+  return (
+    <section className="fintech-card rounded-[26px] p-6 sm:p-7">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <SectionEyebrow>
+            Next actions
+          </SectionEyebrow>
+
+          <h2 className="mt-2 text-xl font-semibold">
+            What you can do next
+          </h2>
+        </div>
+
+        <ChevronRight
+          size={20}
+          className="text-[#5F5760]"
+        />
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {recommendations.map(
+          (recommendation) => {
+            const config = {
+              high: {
+                label: "HIGH",
+                color: "#E66A78",
+              },
+              medium: {
+                label: "MEDIUM",
+                color: "#E7A84B",
+              },
+              low: {
+                label: "TIP",
+                color: "#A66A96",
+              },
+            }[recommendation.priority];
+
+            return (
+              <div
+                key={recommendation.id}
+                className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor:
+                        config.color,
+                    }}
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-[#E5DEE3]">
+                        {recommendation.title}
+                      </h3>
+
+                      <span
+                        className="text-[9px] font-bold tracking-[0.12em]"
+                        style={{
+                          color: config.color,
+                        }}
+                      >
+                        {config.label}
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-sm leading-6 text-[#817783]">
+                      {
+                        recommendation.description
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          },
+        )}
+      </div>
+    </section>
   );
 }
