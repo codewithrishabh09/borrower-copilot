@@ -20,26 +20,28 @@ export default function QuestionCard({
 
   return (
     <section className="w-full">
-      {/* Question number area */}
-      <div className="mb-6 sm:mb-8">
-        <div className="mb-3 sm:mb-4 inline-flex items-center rounded-full bg-[#F4EDF1] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#643652]">
-          Borrower assessment
+      <div className="mb-8">
+        <div className="mb-5 flex items-center gap-3">
+          <span className="h-px w-8 bg-[#A66A96]" />
+
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A66A96]">
+            Borrower intelligence
+          </span>
         </div>
 
-        <h1 className="max-w-3xl text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug sm:leading-tight tracking-[-0.03em] text-[#211A1E]">
+        <h1 className="max-w-3xl text-3xl font-semibold leading-[1.08] tracking-[-0.04em] text-[#F5F1F4] sm:text-4xl lg:text-5xl">
           {question.title}
         </h1>
 
         {question.description && (
-          <p className="mt-3 sm:mt-4 max-w-2xl text-sm sm:text-base leading-6 sm:leading-7 text-[#756A70]">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-[#A59AA4]">
             {question.description}
           </p>
         )}
       </div>
 
-      {/* Selection Questions */}
       {isSelectionQuestion && question.options && (
-        <div className="grid gap-3 sm:gap-4">
+        <div className="grid gap-3">
           {question.options.map((option) => (
             <QuestionOption
               key={option.value}
@@ -51,12 +53,11 @@ export default function QuestionCard({
         </div>
       )}
 
-      {/* Number Input */}
       {question.type === "number" && (
-        <div className="w-full max-w-2xl">
+        <div className="max-w-xl">
           <div className="relative">
             {question.prefix && (
-              <span className="pointer-events-none absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-base sm:text-lg font-semibold text-[#756A70]">
+              <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-xl font-semibold text-[#A59AA4]">
                 {question.prefix}
               </span>
             )}
@@ -76,20 +77,20 @@ export default function QuestionCard({
                     : Number(inputValue),
                 );
               }}
-              className={`w-full rounded-2xl border bg-white px-4 sm:px-5 py-4 sm:py-5 text-lg sm:text-xl font-medium text-[#211A1E] outline-none transition placeholder:text-[#B0A5AA] focus:border-[#4B2440] focus:ring-4 focus:ring-[#4B2440]/10 ${
-                question.prefix ? "pl-9 sm:pl-10" : ""
-              } ${question.suffix ? "pr-20 sm:pr-24" : ""}`}
+              className={`w-full rounded-2xl border border-white/10 bg-[#100D12] px-5 py-5 text-2xl font-semibold text-[#F5F1F4] outline-none transition placeholder:text-[#5F5760] focus:border-[#A66A96]/60 focus:bg-[#17121A] focus:ring-4 focus:ring-[#6D3B63]/15 ${
+                question.prefix ? "pl-11" : ""
+              } ${question.suffix ? "pr-24" : ""}`}
             />
 
             {question.suffix && (
-              <span className="pointer-events-none absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 text-xs sm:text-sm font-medium text-[#756A70]">
+              <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-sm font-medium text-[#A59AA4]">
                 {question.suffix}
               </span>
             )}
           </div>
 
           {question.prefix === "₹" && (
-            <p className="mt-3 text-xs sm:text-sm text-[#84777E]">
+            <p className="mt-3 text-xs text-[#716873]">
               Enter the amount in Indian rupees.
             </p>
           )}

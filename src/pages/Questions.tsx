@@ -1,4 +1,8 @@
-import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ShieldCheck,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import Logo from "../components/Logo";
@@ -22,28 +26,42 @@ export default function Questions({
   onComplete,
   onExit,
 }: QuestionsProps) {
-  const [profile, setProfile] = useState<BorrowerProfile>({});
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [profile, setProfile] =
+    useState<BorrowerProfile>({});
+
+  const [currentIndex, setCurrentIndex] =
+    useState(0);
 
   const visibleQuestions = useMemo(
     () => getVisibleQuestions(profile),
     [profile],
   );
 
-  const currentQuestion = visibleQuestions[currentIndex];
+  const currentQuestion =
+    visibleQuestions[currentIndex];
 
   const currentValue = currentQuestion
-    ? profile[currentQuestion.id as keyof BorrowerProfile]
+    ? profile[
+        currentQuestion.id as keyof BorrowerProfile
+      ]
     : undefined;
 
-  const isCurrentQuestionValid = currentQuestion
-    ? isQuestionValid(currentQuestion, profile)
-    : false;
+  const isCurrentQuestionValid =
+    currentQuestion
+      ? isQuestionValid(currentQuestion, profile)
+      : false;
 
-  function handleAnswer(value: string | number) {
-    if (!currentQuestion) return;
+  function handleAnswer(
+    value: string | number,
+  ) {
+    if (!currentQuestion) {
+      return;
+    }
 
-    let formattedValue: string | number | boolean = value;
+    let formattedValue:
+      | string
+      | number
+      | boolean = value;
 
     if (currentQuestion.type === "yes_no") {
       formattedValue = value === "true";
@@ -59,19 +77,26 @@ export default function Questions({
   }
 
   function handleNext() {
-    if (!currentQuestion || !isCurrentQuestionValid) {
+    if (
+      !currentQuestion ||
+      !isCurrentQuestionValid
+    ) {
       return;
     }
 
     const isLastQuestion =
-      currentIndex === visibleQuestions.length - 1;
+      currentIndex ===
+      visibleQuestions.length - 1;
 
     if (isLastQuestion) {
       onComplete(profile);
       return;
     }
 
-    setCurrentIndex((previousIndex) => previousIndex + 1);
+    setCurrentIndex(
+      (previousIndex) =>
+        previousIndex + 1,
+    );
   }
 
   function handleBack() {
@@ -80,24 +105,31 @@ export default function Questions({
       return;
     }
 
-    setCurrentIndex((previousIndex) => previousIndex - 1);
+    setCurrentIndex(
+      (previousIndex) =>
+        previousIndex - 1,
+    );
   }
 
   if (!currentQuestion) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#FAF9F8] px-6">
-        <p className="text-sm text-[#756A70]">
+      <main className="flex min-h-screen items-center justify-center bg-[#08070A] px-6">
+        <p className="text-sm text-[#A59AA4]">
           Preparing your assessment...
         </p>
       </main>
     );
   }
 
+  const progress =
+    ((currentIndex + 1) /
+      visibleQuestions.length) *
+    100;
+
   return (
-    <main className="min-h-screen bg-[#FAF9F8] text-[#211A1E]">
-      <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8">
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-[#E6E0E2] pb-6">
+    <main className="fintech-shell min-h-screen bg-[#08070A] text-[#F5F1F4]">
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-5 py-5 sm:px-8 lg:px-10">
+        <header className="flex items-center justify-between border-b border-white/[0.08] pb-5">
           <button
             type="button"
             onClick={onExit}
@@ -106,68 +138,93 @@ export default function Questions({
             <Logo size={40} />
 
             <div>
-              <p className="text-base font-semibold">
+              <p className="text-sm font-semibold">
                 Borrower Copilot
               </p>
 
-              <p className="text-xs text-[#756A70]">
-                Private self-assessment
+              <p className="text-[10px] uppercase tracking-[0.12em] text-[#716873]">
+                Financial intelligence
               </p>
             </div>
           </button>
 
-          <div className="hidden items-center gap-2 text-sm text-[#756A70] sm:flex">
-            <ShieldCheck size={17} />
-            <span>No personal data stored</span>
+          <div className="hidden items-center gap-2 text-xs text-[#716873] sm:flex">
+            <ShieldCheck
+              size={16}
+              className="text-[#A66A96]"
+            />
+
+            <span>
+              Your assessment stays on this device
+            </span>
           </div>
         </header>
 
-        {/* Progress */}
-        <div className="py-8">
+        <div className="py-7">
           <ProgressBar
             current={currentIndex + 1}
             total={visibleQuestions.length}
           />
         </div>
 
-        {/* Question Area */}
-        <div className="flex flex-1 items-center py-6">
+        <div className="flex flex-1 items-center py-8">
           <div className="w-full">
-            <QuestionCard
-              question={currentQuestion}
-              value={currentValue}
-              onChange={handleAnswer}
-            />
+            <div className="mb-7 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#5F5760]">
+                Profile signal
+              </span>
+
+              <span className="text-[10px] text-[#5F5760]">
+                {Math.round(progress)}% complete
+              </span>
+            </div>
+
+            <div className="fintech-card fintech-card-hover rounded-[28px] p-6 sm:p-9 lg:p-11">
+              <QuestionCard
+                question={currentQuestion}
+                value={currentValue}
+                onChange={handleAnswer}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between border-t border-[#E6E0E2] pt-6">
+        <div className="flex items-center justify-between border-t border-white/[0.08] pt-5">
           <button
             type="button"
             onClick={handleBack}
-            className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-[#756A70] transition hover:bg-[#F1ECEE]"
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-[#817783] transition hover:bg-white/[0.05] hover:text-[#D0C8CE]"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={17} />
 
-            {currentIndex === 0 ? "Exit" : "Back"}
+            {currentIndex === 0
+              ? "Exit"
+              : "Back"}
           </button>
 
           <button
             type="button"
             onClick={handleNext}
             disabled={!isCurrentQuestionValid}
-            className={`inline-flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition ${
+            className={`group inline-flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition ${
               isCurrentQuestionValid
-                ? "bg-[#4B2440] text-white shadow-sm hover:bg-[#3B1C32]"
-                : "cursor-not-allowed bg-[#E6DFE2] text-[#A69BA0]"
+                ? "bg-gradient-to-r from-[#6D3B63] to-[#8A4D7B] text-white shadow-[0_12px_35px_rgba(109,59,99,0.25)] hover:-translate-y-0.5"
+                : "cursor-not-allowed bg-white/[0.06] text-[#5B555C]"
             }`}
           >
-            {currentIndex === visibleQuestions.length - 1
+            {currentIndex ===
+            visibleQuestions.length - 1
               ? "See my assessment"
               : "Continue"}
 
-            <ArrowRight size={18} />
+            <ArrowRight
+              size={17}
+              className={
+                isCurrentQuestionValid
+                  ? "transition-transform group-hover:translate-x-1"
+                  : ""
+              }
+            />
           </button>
         </div>
       </div>
