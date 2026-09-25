@@ -48,178 +48,101 @@ export function runStressTest({
   safeEmiPercentage = 40,
   incomeDropPercentages = [10, 20, 30],
 }: StressTestInput): StressTestResult {
-  /* =========================================
-     BASIC INPUT VALIDATION
-     ========================================= */
-
-  if (
-    !Number.isFinite(monthlyIncome) ||
-    monthlyIncome <= 0
-  ) {
+  if (monthlyIncome <= 0) {
     throw new Error(
       "Monthly income must be greater than zero.",
     );
   }
 
-  if (
-    !Number.isFinite(monthlyEmi) ||
-    monthlyEmi < 0
-  ) {
+  if (monthlyEmi < 0) {
     throw new Error(
       "Monthly EMI cannot be negative.",
     );
   }
 
-  /* =========================================
-     NORMALIZE SAFE EMI PERCENTAGE
-     ========================================= */
-
-  /*
-   * safeEmiPercentage is an INTERNAL calculated
-   * value. We normalize it here so that a bad
-   * undefined/NaN/0 value cannot crash the entire
-   * assessment.
-   *
-   * Default safe EMI ceiling = 40%.
-   */
-
-  const numericSafeEmiPercentage =
-    Number(safeEmiPercentage);
-
-  const normalizedSafeEmiPercentage =
-    Number.isFinite(
-      numericSafeEmiPercentage,
-    ) &&
-    numericSafeEmiPercentage > 0 &&
-    numericSafeEmiPercentage <= 100
-      ? numericSafeEmiPercentage
-      : 40;
-
-  /* =========================================
-     VALIDATE INCOME DROP SCENARIOS
-     ========================================= */
-
   if (
-    !Array.isArray(
-      incomeDropPercentages,
-    ) ||
-    incomeDropPercentages.length === 0
+    safeEmiPercentage <= 0 ||
+    safeEmiPercentage > 100
   ) {
     throw new Error(
-      "At least one income stress scenario is required.",
+      "Safe EMI percentage must be between 1 and 100.",
     );
   }
 
-  /* =========================================
-     RUN STRESS SCENARIOS
-     ========================================= */
+  const scenarios = incomeDropPercentages.map(
+    (incomeDropPercentage) => {
+      if (
+        incomeDropPercentage < 0 ||
+        incomeDropPercentage >= 100
+      ) {
+        throw new Error(
+          "Income drop percentage must be between 0 and 99.",
+        );
+      }
 
-  const scenarios =
-    incomeDropPercentages.map(
-      (incomeDropPercentage) => {
-        const numericDrop =
-          Number(
-            incomeDropPercentage,
-          );
+      const stressedIncome =
+        monthlyIncome *
+        (1 - incomeDropPercentage / 100);
 
-        if (
-          !Number.isFinite(
-            numericDrop,
-          ) ||
-          numericDrop < 0 ||
-          numericDrop >= 100
-        ) {
-          throw new Error(
-            "Income drop percentage must be between 0 and 99.",
-          );
-        }
+      const safeEmiLimit =
+        stressedIncome *
+        (safeEmiPercentage / 100);
 
-        const stressedIncome =
-          monthlyIncome *
-          (1 - numericDrop / 100);
+      const remainingIncome =
+        stressedIncome - monthlyEmi;
 
-        const safeEmiLimit =
-          stressedIncome *
-          (normalizedSafeEmiPercentage /
-            100);
+      const emiToIncomeRatio =
+        stressedIncome > 0
+          ? (monthlyEmi / stressedIncome) * 100
+          : 100;
 
-        const remainingIncome =
-          stressedIncome -
-          monthlyEmi;
-
-        const emiToIncomeRatio =
-          stressedIncome > 0
-            ? (monthlyEmi /
-                stressedIncome) *
-              100
-            : 100;
-
-        /*
-         * EMI is considered affordable when:
-         *
-         * 1. EMI does not exceed the safe EMI limit
-         * 2. EMI does not exceed stressed income
-         */
-
-        const isAffordable =
-          monthlyEmi <=
-            safeEmiLimit &&
-          monthlyEmi <=
-            stressedIncome;
-
-        return {
-          incomeDropPercentage:
-            numericDrop,
-
-          stressedIncome:
-            Math.round(
-              stressedIncome,
-            ),
-
-          emiToIncomeRatio:
-            Number(
-              emiToIncomeRatio.toFixed(
-                2,
-              ),
-            ),
-
-          safeEmiLimit:
-            Math.round(
-              safeEmiLimit,
-            ),
-
-          remainingIncome:
-            Math.round(
-              remainingIncome,
-            ),
-
-          isAffordable,
-        };
-      },
-    );
-
-  /* =========================================
-     WORST CASE
-     ========================================= */
-
-  const worstCaseAffordable =
-    scenarios.every(
-      (scenario) =>
-        scenario.isAffordable,
-    );
+      return {
+        incomeDropPercentage,
+        stressedIncome: Math.round(stressedIncome),
+        emiToIncomeRatio: Number(
+          emiToIncomeRatio.toFixed(2),
+        ),
+        safeEmiLimit: Math.round(safeEmiLimit),
+        remainingIncome: Math.round(
+          remainingIncome,
+        ),
+        isAffordable:
+          monthlyEmi <= safeEmiLimit,
+      };
+    },
+  );
 
   return {
-    currentIncome:
-      Math.round(monthlyIncome),
-
-    monthlyEmi:
-      Math.round(monthlyEmi),
-
-    safeEmiPercentage:
-      normalizedSafeEmiPercentage,
-
+    currentIncome: monthlyIncome,
+    monthlyEmi,
+    safeEmiPercentage,
     scenarios,
-
-    worstCaseAffordable,
+    worstCaseAffordable: scenarios.every(
+      (scenario) => scenario.isAffordable,
+    ),
   };
+}
+
+/**
+ * Returns the highest income drop percentage
+ * that the borrower can safely handle.
+ */
+export function getMaximumSafeIncomeDrop(
+  stressTestResult: StressTestResult,
+): number {
+  const affordableScenarios =
+    stressTestResult.scenarios.filter(
+      (scenario) => scenario.isAffordable,
+    );
+
+  if (affordableScenarios.length === 0) {
+    return 0;
+  }
+
+  return Math.max(
+    ...affordableScenarios.map(
+      (scenario) =>
+        scenario.incomeDropPercentage,
+    ),
+  );
 }
