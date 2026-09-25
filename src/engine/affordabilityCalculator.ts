@@ -1,12 +1,29 @@
 import type { BorrowerProfile } from "../types/borrower";
 
+import {
+  EMERGENCY_SAVINGS_RULES,
+  SAFE_EMI_FACTORS,
+} from "../config/financialRules";
+
+import type {
+  IncomeReliability,
+} from "./incomeCalculator";
+
+
 export interface AffordabilityInput {
   usableMonthlyIncome: number;
+
   monthlyExpenses: number;
+
   existingEmi: number;
+
+  incomeReliability: IncomeReliability;
+
   emergencySavingsMonths?: number;
+
   upcomingLargeExpense?: boolean;
 }
+
 
 export interface AffordabilityResult {
   usableMonthlyIncome: number;
@@ -17,34 +34,45 @@ export interface AffordabilityResult {
 
   disposableIncome: number;
 
-  maxEmiByIncomeRatio: number;
-
-  maxEmiByDisposableIncome: number;
+  baseSafeMonthlyEmi: number;
 
   safeMonthlyEmi: number;
+
+  safetyFactor: number;
 
   safetyAdjustmentPercentage: number;
 
   explanation: string;
 }
 
+
 /**
- * Calculates the maximum safe EMI a borrower
- * can take after considering:
+ * Calculates the maximum safe new EMI.
  *
- * - Income
- * - Household expenses
+ * Core rule:
+ *
+ * Disposable Income
+ * =
+ * Usable Income
+ * - Household Expenses
  * - Existing EMI
- * - Emergency savings
- * - Upcoming major expenses
+ *
+ * Safe EMI
+ * =
+ * Disposable Income × Safety Factor
+ *
+ * Emergency savings below one month apply
+ * a 10% relative reduction.
  */
 export function calculateSafeMonthlyEmi({
   usableMonthlyIncome,
   monthlyExpenses,
   existingEmi,
+  incomeReliability,
   emergencySavingsMonths = 0,
   upcomingLargeExpense = false,
 }: AffordabilityInput): AffordabilityResult {
+
   if (usableMonthlyIncome <= 0) {
     throw new Error(
       "Usable monthly income must be greater than zero.",
@@ -63,122 +91,151 @@ export function calculateSafeMonthlyEmi({
     );
   }
 
-  /*
-   * Remaining income after necessary expenses
-   * and current loan obligations.
-   */
+  if (emergencySavingsMonths < 0) {
+    throw new Error(
+      "Emergency savings months cannot be negative.",
+    );
+  }
+
+
+  /* =====================================================
+     1. DISPOSABLE INCOME
+     ===================================================== */
+
   const disposableIncome =
-    usableMonthlyIncome -
-    monthlyExpenses -
-    existingEmi;
-
-  /*
-   * Base EMI ratio.
-   *
-   * We start with 40% of usable income as an
-   * upper affordability boundary.
-   *
-   * This includes the borrower's existing EMI.
-   */
-  let safeEmiPercentage = 40;
-
-  /*
-   * Lower savings means higher financial risk.
-   */
-  if (emergencySavingsMonths < 3) {
-    safeEmiPercentage -= 10;
-  } else if (emergencySavingsMonths < 6) {
-    safeEmiPercentage -= 5;
-  }
-
-  /*
-   * Reduce affordability if a major known
-   * expense is expected soon.
-   */
-  if (upcomingLargeExpense) {
-    safeEmiPercentage -= 5;
-  }
-
-  /*
-   * Prevent the ratio from becoming too aggressive
-   * or unrealistically low.
-   */
-  safeEmiPercentage = Math.max(
-    safeEmiPercentage,
-    20,
-  );
-
-  /*
-   * Maximum TOTAL EMI capacity.
-   */
-  const totalEmiCapacity =
-    usableMonthlyIncome *
-    (safeEmiPercentage / 100);
-
-  /*
-   * Existing EMIs consume part of the capacity.
-   */
-  const maxEmiByIncomeRatio =
     Math.max(
-      totalEmiCapacity - existingEmi,
+      usableMonthlyIncome -
+        monthlyExpenses -
+        existingEmi,
       0,
     );
 
+
+  /* =====================================================
+     2. BASE SAFETY FACTOR
+     ===================================================== */
+
+  const safetyFactor =
+    SAFE_EMI_FACTORS[
+      incomeReliability
+    ];
+
+
+  /* =====================================================
+     3. BASE SAFE EMI
+     ===================================================== */
+
+  const baseSafeMonthlyEmi =
+    disposableIncome *
+    safetyFactor;
+
+
+  /* =====================================================
+     4. EMERGENCY SAVINGS ADJUSTMENT
+     ===================================================== */
+
+  let safetyAdjustmentPercentage = 0;
+
+  let adjustedSafeMonthlyEmi =
+    baseSafeMonthlyEmi;
+
+  if (
+    emergencySavingsMonths <
+    EMERGENCY_SAVINGS_RULES.criticalThresholdMonths
+  ) {
+    safetyAdjustmentPercentage =
+      EMERGENCY_SAVINGS_RULES
+        .criticalAdjustment *
+      100;
+
+    adjustedSafeMonthlyEmi =
+      baseSafeMonthlyEmi *
+      (
+        1 -
+        EMERGENCY_SAVINGS_RULES
+          .criticalAdjustment
+      );
+  }
+
+
   /*
-   * Never allocate all disposable income
-   * to the new EMI.
+   * Upcoming large expenses are currently retained
+   * as profile information but do not create an
+   * undocumented percentage adjustment.
    *
-   * We allow only 60% of disposable income.
+   * This keeps the calculation aligned with RULE.md.
    */
-  const maxEmiByDisposableIncome =
+  const safeMonthlyEmi =
     Math.max(
-      disposableIncome * 0.6,
+      adjustedSafeMonthlyEmi,
       0,
     );
 
-  /*
-   * The conservative safe EMI ceiling
-   * is the lower of both limits.
-   */
-  const safeMonthlyEmi = Math.max(
-    Math.min(
-      maxEmiByIncomeRatio,
-      maxEmiByDisposableIncome,
-    ),
-    0,
-  );
+
+  /* =====================================================
+     5. EXPLANATION
+     ===================================================== */
+
+  let explanation: string;
+
+  if (disposableIncome <= 0) {
+    explanation =
+      "Your usable income is fully consumed by household expenses and existing EMI obligations, leaving no safe capacity for a new EMI.";
+  } else if (
+    emergencySavingsMonths <
+    EMERGENCY_SAVINGS_RULES
+      .criticalThresholdMonths
+  ) {
+    explanation =
+      "The safe EMI is based on disposable income and your income reliability factor, with an additional 10% reduction because your emergency savings cover less than one month.";
+  } else if (upcomingLargeExpense) {
+    explanation =
+      "The safe EMI is based on disposable income and your income reliability factor. A reported upcoming large expense is shown as a risk signal but does not apply an undocumented extra percentage adjustment.";
+  } else {
+    explanation =
+      "The safe EMI is based on disposable income and the income reliability factor, while keeping part of disposable income uncommitted for financial safety.";
+  }
+
 
   return {
     usableMonthlyIncome:
-      Math.round(usableMonthlyIncome),
+      Math.round(
+        usableMonthlyIncome,
+      ),
 
     monthlyExpenses:
-      Math.round(monthlyExpenses),
+      Math.round(
+        monthlyExpenses,
+      ),
 
     existingEmi:
-      Math.round(existingEmi),
+      Math.round(
+        existingEmi,
+      ),
 
     disposableIncome:
-      Math.round(disposableIncome),
+      Math.round(
+        disposableIncome,
+      ),
 
-    maxEmiByIncomeRatio:
-      Math.round(maxEmiByIncomeRatio),
-
-    maxEmiByDisposableIncome:
-      Math.round(maxEmiByDisposableIncome),
+    baseSafeMonthlyEmi:
+      Math.round(
+        baseSafeMonthlyEmi,
+      ),
 
     safeMonthlyEmi:
-      Math.round(safeMonthlyEmi),
+      Math.round(
+        safeMonthlyEmi,
+      ),
 
-    safetyAdjustmentPercentage:
-      safeEmiPercentage,
+    safetyFactor,
 
-    explanation:
-      safeMonthlyEmi > 0
-        ? "The safe EMI ceiling is based on both income capacity and remaining disposable income, using the more conservative limit."
-        : "Your current expenses and existing EMI obligations leave no safe capacity for an additional EMI.",
+    safetyAdjustmentPercentage,
+
+    explanation,
   };
 }
+
 
 /**
  * Convenience function for calculating affordability
@@ -187,6 +244,7 @@ export function calculateSafeMonthlyEmi({
 export function calculateProfileAffordability(
   profile: BorrowerProfile,
   usableMonthlyIncome: number,
+  incomeReliability: IncomeReliability,
 ): AffordabilityResult {
   return calculateSafeMonthlyEmi({
     usableMonthlyIncome,
@@ -196,6 +254,8 @@ export function calculateProfileAffordability(
 
     existingEmi:
       profile.existingEmi ?? 0,
+
+    incomeReliability,
 
     emergencySavingsMonths:
       profile.emergencySavingsMonths ?? 0,

@@ -190,6 +190,7 @@ export function analyzeBorrower(
     calculateProfileAffordability(
       profile,
       income.usableMonthlyIncome,
+      income.incomeReliability,
     );
 
 
@@ -328,6 +329,15 @@ export function analyzeBorrower(
   /* ==================================
      11. STRESS TEST
   ================================== */
+  const safeEmiPercentage =
+  Number.isFinite(
+    affordability.safetyAdjustmentPercentage,
+  ) &&
+  affordability.safetyAdjustmentPercentage > 0 &&
+  affordability.safetyAdjustmentPercentage <=
+    100
+    ? affordability.safetyAdjustmentPercentage
+    : 40;
 
   const stressTest =
     runStressTest({
@@ -337,10 +347,8 @@ export function analyzeBorrower(
       monthlyEmi:
         requestedEmiResult.monthlyEmi,
 
-      safeEmiPercentage:
-        affordability.safetyAdjustmentPercentage,
+      safeEmiPercentage,
     });
-
 
   /* ==================================
      12. FINAL BORROWING DECISION
